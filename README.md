@@ -1,11 +1,38 @@
 # Codex Token Report
 
-本地、只读地扫描 Codex 会话日志，按天统计 input、cached input、cache write、output
-token，并按照 OpenAI 官网公布的价格计算：
+在本机只读扫描 Codex 会话日志，用浏览器查看 Token、Standard/Fast API 等价成本、
+Credits 估算，以及已采集的账号额度与重置历史。统计保存到本地 SQLite，源日志清空后
+仍可查看已经采集的记录。
 
-- 逐请求 Standard/Fast API 等价美元成本
-- ChatGPT/Codex credits 估算
-- 无公开价格模型的独立用量
+## 功能速览
+
+| 功能 | 可以查看或操作 |
+| --- | --- |
+| 用量总览 | Input、缓存、Cache write、Output、模型用量、Standard/Fast 等价美元与 Credits 估算；支持按天、按小时和精确时间范围统计。无公开价格模型的用量单独保留。 |
+| 模型定价 | models.dev 价格缓存、手工覆盖、调用时保存的价格快照，以及按当前价格重算。 |
+| 项目与会话 | 按 Git 项目归并用量；查看父子会话树、搜索和排序会话，展开逐调用明细与趋势。 |
+| 额度与重置 | 当前登录账号的实时额度读数、确认或推测的重置时刻、周期美元换算、保存的历史与离线查看。 |
+| 历史持久化 | 保存逐调用 Token、档位证据、会话元数据、价格快照和已采集额度；源日志清空、归档或截断后继续保留。 |
+| CSV 导出 | 导出当前日期范围、统计粒度和价格口径下的用量明细。 |
+
+API 等价金额属于估算，不是订阅账单。当前调用统计尚未按账号区分，额度换算和跨机
+历史显示的限制见下方“当前账号额度”和“备份与跨机迁移”。
+
+## 应用截图
+
+用量总览：
+
+![用量总览：Token、模型与 API 等价成本](docs/screenshots/overview.jpg)
+
+会话用量；截图中的会话名称使用 `example1`、`example2`、`example3` 等示例名称：
+
+![会话用量：示例会话排行与父子会话](docs/screenshots/sessions.jpg)
+
+额度等价美元与保存的周期历史：
+
+![额度等价美元：周期换算与保存的历史读数](docs/screenshots/quota-value.jpg)
+
+## 功能说明
 
 应用不会上传日志，也不会把提示词或回复正文写入自己的数据库。逐调用 token
 统计和已经识别的 Fast/Priority 证据会持久保存在本地 SQLite，不随 Codex 滚动日志删除。
