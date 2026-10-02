@@ -172,8 +172,9 @@ input[type="date"], select { color: var(--text); border: 1px solid var(--border)
 @keyframes quota-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .quota-skeleton { animation: none; } }
 @keyframes page-in { from { opacity: .55; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 11px; margin: 11px 0 20px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.45fr) minmax(0, 1.2fr); gap: 11px; margin: 11px 0 20px; }
 .kpi-card { position: relative; overflow: hidden; min-height: 132px; padding: 19px; overflow-wrap: anywhere; }
+.kpi-card-token { padding-inline: 15px; }
 .kpi-card::before { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 3px; background: var(--accent); }
 .kpi-card p { margin-bottom: 17px; color: var(--muted); font-size: 11px; }
 .kpi-card strong { display: block; font-size: clamp(21px, 2.2vw, 30px); letter-spacing: -.045em; line-height: 1.2; font-variant-numeric: tabular-nums; }
@@ -346,6 +347,11 @@ code { color: #53647c; }
   .date-toolbar { align-items: stretch; flex-direction: column; gap: 10px; }
   .date-range-button { width: 100%; }
 }
+@media (max-width: 1080px) {
+  .kpi-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .kpi-card { grid-column: span 3; }
+  .kpi-card-token { grid-column: span 2; }
+}
 @media (max-width: 900px) {
   :root { --sidebar-width: 0px; }
   .app-main { width: 100%; margin-left: 0; padding: 70px 20px 24px; }
@@ -376,6 +382,8 @@ code { color: #53647c; }
   .calendar-time { flex-direction: column; align-items: flex-start; }
   .privacy-chip { display: none; }
   .kpi-card { min-height: 116px; padding: 16px; }.chart-panel, .price-panel, .table-panel, .project-detail-panel { padding: 16px; }
+  .kpi-card-token { padding-inline: 10px; }
+  .kpi-card-token strong { font-size: clamp(14px, 4.25vw, 20px); white-space: nowrap; }
   .chart-row { grid-template-columns: 45px minmax(85px,1fr) 90px; }.project-chart .chart-row { grid-template-columns: 95px minmax(35px,1fr) 85px; }.settings-panel { padding: 16px; }
   .project-selector-heading { align-items: stretch; flex-direction: column; }.project-selector-heading select { min-width: 0; width: 100%; }
   footer { flex-direction: column; }

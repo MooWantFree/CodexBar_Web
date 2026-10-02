@@ -10,13 +10,13 @@ function formatters() {
   if (!formatterCache.has(locale)) formatterCache.set(locale, {
     number: new Intl.NumberFormat(locale),
     compact: new Intl.NumberFormat(locale, {notation: 'compact', maximumFractionDigits: 2}),
-    currency: [4, 6].map(maximumFractionDigits => new Intl.NumberFormat(locale, {style: 'currency', currency: 'USD', maximumFractionDigits})),
+    currency: new Intl.NumberFormat(locale, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 0, maximumFractionDigits: 2}),
   });
   return formatterCache.get(locale);
 }
 export const formatNumber = value => formatters().number.format(value || 0);
 export const formatCompact = value => formatters().compact.format(value || 0);
-export const money = (value, precise = false) => formatters().currency[precise ? 1 : 0].format(value || 0);
+export const money = value => formatters().currency.format(value || 0);
 export function formatDateTime(value, options = {}) {
   return value == null || value === '' ? t('未知') : new Date(value).toLocaleString(locale, {timeZone: document.body.dataset.timezone || 'UTC', hour12: false, ...options});
 }

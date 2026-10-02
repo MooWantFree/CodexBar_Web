@@ -15,7 +15,6 @@ const parent = {...total, key: 'parent', title: 'Parent session', title_generate
 const own = {...parent, has_children: false, depth: 0};
 const child = {...total, key: 'child', title: 'Child session', title_generated: false, projects: ['Project B'], models: ['GPT 6 Astra'], last_activity: parent.last_activity, depth: 1};
 const group = {...parent, members: [own, child]};
-const sample = {...total, session_id: 'child', timestamp_utc: '2026-10-01T01:00:00Z', window_minutes: 300, limit_id: 'codex', slot: 'primary', used_percent: 25, resets_at: '2026-10-01T07:00:00Z'};
 const config = {defaultStart: '2026-10-01', defaultEnd: '2026-10-01', timezone: 'Asia/Taipei'};
 const json = data => ({ok: true, json: async () => data});
 
@@ -37,7 +36,6 @@ function mount(Page, route = '/sessions', dispatch) {
 }
 function sessionDispatch(url) {
   if (url.pathname === '/api/sessions') return {sessions: [group], inferred_price_calls: 1};
-  if (url.pathname.endsWith('/quota')) return {samples: [sample], total: 1, offset: 0, has_more: false};
   if (url.pathname === '/api/sessions/detail') {
     const selected = url.searchParams.get('session') === 'child' ? child : parent;
     return {session: selected, total, daily: [day], hourly: [hour], requests: [{...total, key: 'request-1', timestamp: '2026-10-01T01:00:00Z', model: 'GPT 6 Astra', service_tier: 'priority', price_snapshot: {source: 'bundled', inferred: false, price_date: '2026-10-01', observed_at: '2026-10-01T01:00:00Z'}}], request_count: 1, offset: 0};
@@ -55,14 +53,13 @@ describe('React analytics pages', () => {
   it('renders all overview KPIs, model breakdown, unknown costs and model charts', async () => {
     mount(OverviewPage, '/overview', () => ({total: {...total, unknown_price_calls: 1, unknown_credit_calls: 1}, models: [{...day.models[0], unknown_price_calls: 1}], daily: [day], hourly: [hour]}));
     await screen.findByRole('heading', {name: 'Usage by model'});
-    expect(document.querySelectorAll('.kpi-card')).toHaveLength(6);
-    expect(document.getElementById('costKpi').textContent).toBe('$8.00');
+    expect(document.querySelectorAll('.kpi-card')).toHaveLength(5);
+    expect(document.getElementById('costKpi').textContent).toBe('$8');
     expect(document.getElementById('costKpi').closest('article').textContent).toContain('+ Unknown');
-    expect(document.getElementById('creditsKpi').textContent).toBe('3');
-    expect(document.getElementById('creditsKpi').closest('article').textContent).toContain('+ Unknown');
-    expect(document.getElementById('modelTable').textContent).toContain('$8.00 + Unknown');
+    expect(document.getElementById('creditsKpi')).toBeNull();
+    expect(document.getElementById('modelTable').textContent).toContain('$8 + Unknown');
     expect(document.querySelector('#tokenChart .model-segment').style.background).toBe('rgb(118, 85, 197)');
-    expect(document.querySelector('#costChart .model-segment').getAttribute('title')).toContain('$8.00');
+    expect(document.querySelector('#costChart .model-segment').getAttribute('title')).toContain('$8');
     expect(screen.getByText(/calls use prices backfilled/)).toBeTruthy();
   });
 
@@ -89,7 +86,7 @@ describe('React analytics pages', () => {
     expect(document.getElementById('selectedProjectPath').textContent).toBe('E:\\Code\\B');
   });
 
-  it('expands the session tree and requests child self scope with separate saved quota samples', async () => {
+  it('expands the session tree and requests child self scope without account quota readings', async () => {
     const {calls} = mount(SessionsPage, '/sessions', sessionDispatch);
     await screen.findByRole('heading', {name: 'Parent session · Session total'});
     await userEvent.click(screen.getByRole('button', {name: 'Expand usage for Parent session'}));
@@ -97,12 +94,11 @@ describe('React analytics pages', () => {
     await userEvent.click(screen.getByRole('button', {name: 'Child session'}));
     await screen.findByRole('heading', {name: 'Child session · Own usage'});
     expect(calls.some(url => url.pathname === '/api/sessions/detail' && url.searchParams.get('session') === 'child' && url.searchParams.get('scope') === 'self')).toBe(true);
-    expect(calls.some(url => url.pathname === '/api/sessions/child/quota' && url.searchParams.get('include_children') === 'false')).toBe(true);
+    expect(calls.some(url => url.pathname.startsWith('/api/sessions/') && url.pathname.endsWith('/quota'))).toBe(false);
     const selectedUrl = new URLSearchParams(screen.getByTestId('url').textContent);
     expect(selectedUrl.get('session')).toBe('child');
     expect(selectedUrl.get('session_scope')).toBe('self');
-    expect(document.getElementById('sessionQuotaTable').textContent).toContain('25%');
-    expect(document.getElementById('sessionQuotaTable').textContent).not.toContain('Invalid Date');
+    expect(document.getElementById('sessionQuotaPanel')).toBeNull();
   });
 
   it('sends request sorting and pagination to the server while retaining session scope', async () => {
@@ -120,33 +116,13 @@ describe('React analytics pages', () => {
     await waitFor(() => expect(calls.some(url => url.pathname === '/api/sessions/detail' && url.searchParams.get('sort_by') === 'input_tokens' && url.searchParams.get('offset') === '50' && url.searchParams.get('scope') === 'self')).toBe(true));
   });
 
-  it('paginates quota readings independently of the date filter and retains them on failure', async () => {
-    let fail = true;
-    const {calls} = mount(SessionsPage, '/sessions', url => {
-      if (url.pathname.endsWith('/quota')) {
-        const offset = Number(url.searchParams.get('offset'));
-        if (offset === 50 && fail) throw new Error('Network failed');
-        return {samples: [{...sample, session_id: offset ? 'last-record' : 'saved-record'}], offset, total: 51, has_more: offset === 0};
-      }
-      return sessionDispatch(url);
-    });
-    const panel = () => document.getElementById('sessionQuotaPanel');
-    await waitFor(() => expect(panel().textContent).toContain('saved-record'));
-    await userEvent.click(within(panel()).getByRole('button', {name: 'Next'}));
-    await screen.findByText('Network failed');
-    expect(panel().textContent).toContain('saved-record');
-    expect(panel().textContent).toContain('Keeping the last successfully loaded records');
-    fail = false;
-    await userEvent.click(within(panel()).getByRole('button', {name: 'Next'}));
-    await waitFor(() => expect(panel().textContent).toContain('last-record'));
-    const before = calls.filter(url => url.pathname.endsWith('/quota')).length;
+  it('updates session usage when the date filter changes without requesting removed quota readings', async () => {
+    const {calls} = mount(SessionsPage, '/sessions', sessionDispatch);
+    await screen.findByRole('heading', {name: 'Parent session · Session total'});
     await userEvent.click(screen.getByText('Change range'));
     await waitFor(() => expect(calls.filter(url => url.pathname === '/api/sessions').length).toBe(2));
-    expect(calls.filter(url => url.pathname.endsWith('/quota'))).toHaveLength(before);
-    for (const url of calls.filter(url => url.pathname.endsWith('/quota'))) {
-      expect(url.searchParams.has('start')).toBe(false);
-      expect(url.searchParams.has('end')).toBe(false);
-    }
+    expect(calls.some(url => url.pathname.startsWith('/api/sessions/') && url.pathname.endsWith('/quota'))).toBe(false);
+    expect(document.getElementById('sessionQuotaPanel')).toBeNull();
   });
 
   it('preserves real titles that match the generated fallback and escapes user markup', async () => {

@@ -13,11 +13,10 @@ export default function OverviewPage() {
   if (!total) return <><ErrorNotice error={query.error}/><EmptyState>{t(query.isPending ? '正在汇总用量…' : '暂无数据')}</EmptyState></>;
   const cacheRate = total.input_tokens ? total.cached_input_tokens / total.input_tokens * 100 : 0;
   const kpis = [
-    ['accent-blue', '总 Input', formatCompact(total.input_tokens), formatNumber(total.input_tokens), t('普通输入 {count}', {count: formatCompact(total.uncached_input_tokens)}), 'inputKpi'],
-    ['accent-cyan', '缓存 Input', formatCompact(total.cached_input_tokens), formatNumber(total.cached_input_tokens), t('占 Input {percent}%', {percent: fixed(cacheRate)}), 'cachedKpi'],
-    ['accent-violet', '总 Output', formatCompact(total.output_tokens), formatNumber(total.output_tokens), t('其中推理 {count}', {count: formatCompact(total.reasoning_output_tokens)}), 'outputKpi'],
+    ['accent-blue kpi-card-token', '总 Input', formatCompact(total.input_tokens), formatNumber(total.input_tokens), t('普通输入 {count}', {count: formatCompact(total.uncached_input_tokens)}), 'inputKpi'],
+    ['accent-cyan kpi-card-token', '缓存 Input', formatCompact(total.cached_input_tokens), formatNumber(total.cached_input_tokens), t('占 Input {percent}%', {percent: fixed(cacheRate)}), 'cachedKpi'],
+    ['accent-violet kpi-card-token', '总 Output', formatCompact(total.output_tokens), formatNumber(total.output_tokens), t('其中推理 {count}', {count: formatCompact(total.reasoning_output_tokens)}), 'outputKpi'],
     ['accent-amber', 'API 等价成本', money(total.api_usd_known), cost(total), t('定价覆盖 {percent}% 调用', {percent: fixed(total.price_coverage_percent)}), 'costKpi', priceUnknown(total)],
-    ['accent-green', 'Credits 用量估算', formatNumber(Number(fixed(total.credits_known, 3))), '', t('公开 token 费率估算'), 'creditsKpi', total.unknown_credit_calls > 0],
     ['accent-pink', 'Fast 调用', formatNumber(total.fast_calls), `Fast tokens ${formatNumber(total.fast_tokens)}`, t('档位覆盖 {percent}%', {percent: fixed(total.tier_coverage_percent)}), 'fastKpi'],
   ];
   return <section className="page" data-page="overview" aria-busy={query.isFetching}>
@@ -33,8 +32,8 @@ export default function OverviewPage() {
     </div><div className="table-wrap"><table><SortableHead columns={MODEL_COLUMNS} sort={sort} onSort={setSort}/><tbody id="modelTable">
       {sorted.map(row => <tr key={row.key}><td><i className="model-dot" style={{background: modelColor(row.key)}}/>{modelName(row)}</td>
         <td>{formatNumber(row.calls)}</td><td>{formatNumber(row.fast_calls)}</td><td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td>
-        <td className={priceUnknown(row) ? 'unknown' : ''}>{cost(row)}</td><td>{fastSurcharge(row)}</td><td>{row.unknown_credit_calls ? '—' : formatNumber(Number(fixed(row.credits_known, 3)))}</td><td><Coverage value={row.tier_coverage_percent}/></td>
-      </tr>)}{!models.length && <tr><td colSpan={10}><EmptyState>{t('暂无数据')}</EmptyState></td></tr>}
+        <td className={priceUnknown(row) ? 'unknown' : ''}>{cost(row)}</td><td>{fastSurcharge(row)}</td><td><Coverage value={row.tier_coverage_percent}/></td>
+      </tr>)}{!models.length && <tr><td colSpan={9}><EmptyState>{t('暂无数据')}</EmptyState></td></tr>}
     </tbody></table></div></section>
   </section>;
 }

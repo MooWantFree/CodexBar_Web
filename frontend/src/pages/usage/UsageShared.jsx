@@ -116,7 +116,7 @@ export function useSummary() {
 export const FAST_TITLE = 'API 等价美元加价；订阅内 Fast 额度消耗是 Standard 的 2.5 倍';
 export const MODEL_COLUMNS = [['模型'], ['调用', 'calls'], ['Fast', 'fast_calls'], ['Input', 'input_tokens'], ['缓存', 'cached_input_tokens'],
   ['Output', 'output_tokens'], ['API 等价', 'api_usd_known'], ['Fast API 加价', 'fast_surcharge_usd', FAST_TITLE],
-  ['Credits', 'credits_known'], ['档位覆盖', 'tier_coverage_percent']];
+  ['档位覆盖', 'tier_coverage_percent']];
 
 
 export function scrollToDetail(ref) {

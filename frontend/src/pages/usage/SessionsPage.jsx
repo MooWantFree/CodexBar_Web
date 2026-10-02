@@ -4,7 +4,7 @@ import {useQuery} from '@tanstack/react-query';
 import {useDashboard} from '../../context/DashboardContext';
 import {apiGet} from '../../lib/api';
 import {locale, t} from '../../lib/i18n';
-import {formatNumber, money, formatDateTime, fastSurcharge, quotaWindowLabel, modelName} from '../../lib/format';
+import {formatNumber, money, formatDateTime, fastSurcharge, modelName} from '../../lib/format';
 import {EmptyState, ErrorNotice, Pager} from '../../components/Shared';
 import {PAGE_SIZE, EMPTY_ROWS, numeric, fixed, priceUnknown, cost, sessionTitle, projectName, sortUsageRows, SortableHead, SnapshotNotice, TrendPair, scrollToDetail, FAST_TITLE} from './UsageShared';
 
@@ -49,33 +49,6 @@ function SnapshotBadge({snapshot}) {
   return <span title={detail} className={`coverage ${snapshot?.inferred ? 'partial' : ''}`}>{provenance}</span>;
 }
 
-function SessionQuota({selection}) {
-  const [page, setPage] = useState(0);
-  const [saved, setSaved] = useState(null);
-  const selectionKey = selection ? `${selection.key}:${selection.scope}` : '';
-  useEffect(() => { setPage(0); }, [selectionKey]);
-  const query = useQuery({queryKey: ['session-quota', selection?.key, selection?.scope, page], enabled: Boolean(selection?.key),
-    queryFn: ({signal}) => apiGet(`/api/sessions/${encodeURIComponent(selection.key)}/quota?${new URLSearchParams({offset: page * PAGE_SIZE, limit: PAGE_SIZE, include_children: String(selection.scope === 'tree')})}`, {signal})});
-  useEffect(() => { if (query.data) setSaved({key: selectionKey, data: query.data}); }, [query.data, selectionKey]);
-  const data = query.data || (saved?.key === selectionKey ? saved.data : null);
-  const samples = data?.samples || EMPTY_ROWS;
-  const pages = Math.max(1, Math.ceil(numeric(data?.total) / PAGE_SIZE));
-  return <section id="sessionQuotaPanel" aria-labelledby="sessionQuotaTitle" aria-busy={query.isFetching}>
-    <h3 id="sessionQuotaTitle">{t('此会话日志保存的账号额度读数')}</h3>
-    <p className="fine-print">{t('显示整个会话期间采集的账号额度与计划重置时刻，不受上方日期筛选影响。读数可能包含并行会话、其他设备和子会话的使用，不能精确归属为此对话消耗的百分比。')}</p>
-    <ErrorNotice error={query.error}/>{query.error && data && <p className="fine-print unknown">{t('读取失败后保留上次成功读取的记录。')}</p>}
-    <p id="sessionQuotaStatus" className="fine-print" role="status">{!selection ? t('选择一个会话查看保存的读数。') : query.isPending ? t('正在读取此会话日志保存的账号额度读数…') : data ?
-      t('{count} 个已保存的账号额度读数 · {scope} · 源日志清空后仍保留', {count: formatNumber(data.total), scope: t(selection.scope === 'tree' ? '包含子会话日志' : '此会话自身日志')}) : ''}</p>
-    <div className="table-wrap quota-value-observations-wrap"><table><thead><tr>{['采集时间', '额度窗口', '账号已用额度', '当次计划重置', '来源会话'].map(label => <th key={label} scope="col">{t(label)}</th>)}</tr></thead>
-      <tbody id="sessionQuotaTable">{samples.map((sample, index) => <tr key={`${sample.session_id}-${sample.timestamp_utc}-${sample.limit_id}-${sample.slot}-${index}`}>
-        <td>{formatDateTime(sample.timestamp_utc, {hour12: false})}</td><td>{quotaWindowLabel(sample)}</td><td>{sample.used_percent == null ? t('未知') : `${Number(fixed(sample.used_percent, 2))}%`}</td>
-        <td>{formatDateTime(sample.resets_at, {hour12: false})}</td><td title={sample.session_id}>{sample.session_id}</td>
-      </tr>)}{!samples.length && <tr><td colSpan={5}><EmptyState>{t(selection && data ? '此会话日志尚未采集到账号额度读数；已保存的 Token 和 API 等价金额仍可查看。' : '暂无读数')}</EmptyState></td></tr>}</tbody>
-    </table></div><Pager page={data ? Math.floor(data.offset / PAGE_SIZE) : 0} pages={pages}
-      onPage={next => next === page ? query.refetch() : setPage(next)} disabled={query.isFetching || !data}/>
-  </section>;
-}
-
 function SessionDetail({selection, detailRef}) {
   const {rangeKey, queryString} = useDashboard();
   const [page, setPage] = useState(0);
@@ -97,7 +70,6 @@ function SessionDetail({selection, detailRef}) {
         <td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td><td>{priceUnknown(row) ? t('未知') : money(row.api_usd_known, true)}</td><td>{fastSurcharge(row, true)}</td><td><SnapshotBadge snapshot={row.price_snapshot}/></td>
       </tr>)}{!report?.requests?.length && <tr><td colSpan={9}><EmptyState>{t('暂无调用')}</EmptyState></td></tr>}
     </tbody></table></div><Pager page={page} pages={pages} onPage={setPage} disabled={query.isFetching || !report}/>
-    <SessionQuota selection={selection}/>
   </section>;
 }
 

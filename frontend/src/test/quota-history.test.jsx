@@ -54,12 +54,12 @@ describe("quota saved history", () => {
     expect(document.querySelector("#quotaWindows progress")).toBeNull();
     expect(document.querySelector("#quotaValueTitle").textContent).toBe("Last saved conversion");
     expect(document.querySelector("#quotaValueWindows").textContent).toContain("Saved quota reading");
-    expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8.00");
+    expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8");
     expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("Historical cycle");
     expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("Current cycle");
     expect(document.querySelector(".reset-selection").textContent).toContain("Last successful read");
     fireEvent.click(screen.getByText("View readings"));
-    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8.00"));
+    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8"));
     expect(document.querySelector("#quotaValueHistoryDetailStatus").textContent).toContain("last reading is not final usage at reset");
   });
 
@@ -69,8 +69,8 @@ describe("quota saved history", () => {
     await screen.findByText("View readings");
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("Network unavailable"); }));
     await act(async () => { await client.invalidateQueries({ predicate: query => query.queryKey[0] !== "quota" }); });
-    expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("$8.00");
-    expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8.00");
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("$8");
+    expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8");
     await waitFor(() => expect(document.querySelector("#quotaValueHistoryStatus").textContent).toContain("Displayed records retain values"));
     expect(document.querySelector("#quotaValueHistoryPanel").getAttribute("aria-busy")).toBe("false");
   });
@@ -87,7 +87,7 @@ describe("quota saved history", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh quota" }));
     await waitFor(() => expect(document.querySelector("#quotaStatus").textContent).toContain("Network unavailable"));
     expect(document.querySelector(".reset-selection").textContent).toContain("Legacy local account archive (log directory ownership unverified)");
-    expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("$8.00");
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("$8");
     expect(document.querySelector("#quotaWindows progress")).toBeNull();
   });
 
@@ -108,7 +108,7 @@ describe("quota saved history", () => {
     act(() => client.setQueryData(["quota"], { ...offlineQuota, reset_history_scope: "account-b", checked_at: "2026-10-01T03:00:00Z", reset_records: [] }));
     await waitFor(() => expect(historyRequests).toBe(2));
     await act(async () => { releaseHistory(response(historyResponse([cycle]))); });
-    expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("$8.00");
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("$8");
     expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("View readings");
   });
 
@@ -117,19 +117,19 @@ describe("quota saved history", () => {
     const { client } = mount(<QuotaValuePage />);
     await screen.findByText("View readings");
     fireEvent.click(screen.getByText("View readings"));
-    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8.00"));
+    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8"));
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     act(() => client.setQueryData(["quota"], { ...offlineQuota, reset_history_scope: "account-c", checked_at: "2026-10-01T04:00:00Z" }));
     await waitFor(() => expect(document.querySelector("#quotaValueHistoryDetail")).toBeNull());
-    expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("$8.00");
-    expect(document.querySelector("#quotaValueWindows").textContent).not.toContain("$8.00");
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("$8");
+    expect(document.querySelector("#quotaValueWindows").textContent).not.toContain("$8");
   });
 
   it("keeps cycle details open without moving focus when an automatic reading updates", async () => {
     mockQuotaApis();
     const { client } = mount(<QuotaValuePage />);
     fireEvent.click(await screen.findByText("View readings"));
-    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8.00"));
+    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8"));
     const refresh = document.querySelector("#refreshQuotaValueButton");
     refresh.focus();
     const fetch = globalThis.fetch;
@@ -138,7 +138,7 @@ describe("quota saved history", () => {
       : fetch(path)));
     act(() => client.setQueryData(["quota"], { ...offlineQuota, checked_at: "2026-10-01T03:00:00Z" }));
     expect(document.querySelector("#quotaValueHistoryDetail")).not.toBeNull();
-    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$16.00"));
+    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$16"));
     expect(document.activeElement).toBe(refresh);
   });
 
@@ -161,7 +161,7 @@ describe("quota saved history", () => {
     expect(document.querySelector("#quotaStatus").textContent).toContain("Raw quota readings could not be saved");
     expect(document.querySelector("#quotaStatus").textContent).toContain("Reset records could not be saved");
     expect(document.querySelector("#quotaValueStatus").textContent).toContain("amounts remain available");
-    expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8.00");
+    expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8");
   });
 });
 

@@ -78,6 +78,20 @@ describe('message catalogs', () => {
 });
 
 describe('localized formatting', () => {
+  it.each(['en-US', 'zh-TW', 'ja-JP'])('rounds dollar amounts to at most two decimals with only the dollar symbol in %s', async language => {
+    await loadI18n([language]);
+    const {money, fastSurcharge} = await import('../lib/format');
+    expect(money(8)).toBe('$8');
+    expect(money(8.5)).toBe('$8.5');
+    expect(money(1234.567)).toBe('$1,234.57');
+    expect(money(1.005)).toBe('$1.01');
+    expect(money(0.004)).toBe('$0');
+    expect(money(0.005)).toBe('$0.01');
+    expect(money(-1.235)).toBe('-$1.24');
+    expect(money(8.555, true)).toBe('$8.56');
+    expect(fastSurcharge({fast_surcharge_usd: 0.155, unknown_fast_price_calls: 0}, true)).toBe('$0.16');
+  });
+
   it('uses the persisted Chinese choice for native labels, English-keyed features, and formatting', async () => {
     localStorage.setItem('codex-token-report.language', 'zh');
     const store = await loadI18n(['en-US']);
@@ -204,7 +218,7 @@ describe('language preferences', () => {
     expect(document.documentElement.lang).toBe('ja');
     expect(store.t('模型定价')).toBe('モデル料金');
     expect(formatCompact(10000)).toBe('1万');
-    expect(money(10)).toBe(new Intl.NumberFormat('ja', {style: 'currency', currency: 'USD', maximumFractionDigits: 4}).format(10));
+    expect(money(10)).toBe('$10');
     expect(formatDateTime('2026-10-01T17:03:00Z', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})).toBe('2026/10/02 01:03');
     store.setLanguagePreference('auto');
     expect(store.locale).toBe('en');
