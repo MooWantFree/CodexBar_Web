@@ -45,6 +45,7 @@ from .scanner import SessionScanner
 from .session_quota import SessionQuotaHistory
 
 QUOTA_SAMPLE_INTERVAL_SECONDS = 65
+PRICING_CHECK_INTERVAL_SECONDS = 15 * 60
 
 
 def _validate_date(value: str | None, field: str) -> str | None:
@@ -216,6 +217,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=package_dir / "templates")
 
     scan_lock = asyncio.Lock()
+    pricing_refresh_lock = asyncio.Lock()
+    initial_task: asyncio.Task | None = None
     quota_condition = asyncio.Condition()
     quota_tasks: set[asyncio.Task] = set()
     quota_switching = False
@@ -300,8 +303,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
             return result
 
+    async def pricing_operation(operation, *args):
+        task = asyncio.create_task(asyncio.to_thread(operation, *args))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Catalog fetches have a bounded timeout. Finish the worker before
+            # releasing the refresh lock or shutting down the application.
+            with suppress(Exception):
+                await asyncio.shield(task)
+            raise
+
+    async def refresh_automatic_pricing(application: FastAPI) -> None:
+        if initial_task is not None:
+            await asyncio.shield(initial_task)
+        async with pricing_refresh_lock:
+            application.state.pricing_refresh_status.update(
+                state="running", started_at=datetime.now(UTC).isoformat(), error=None,
+            )
+            try:
+                result = await pricing_operation(pricing.refresh_on_startup, active_settings.timezone)
+                if result is None:
+                    state, error = "skipped", None
+                else:
+                    error = "; ".join(
+                        f"{model}: {message}" for model, message in result["failed_models"].items()
+                    ) or None
+                    state = "partial" if error and result["updated_models"] else "error" if error else "complete"
+                application.state.pricing_refresh_status.update(state=state, error=error)
+            except asyncio.CancelledError:
+                application.state.pricing_refresh_status.update(state="cancelled", error=None)
+                raise
+            except Exception as exc:
+                application.state.pricing_refresh_status.update(state="error", error=str(exc))
+                logging.getLogger(__name__).exception("Automatic pricing refresh failed")
+            finally:
+                application.state.pricing_refresh_status["finished_at"] = datetime.now(UTC).isoformat()
+
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        nonlocal initial_task
         folder_picker.reopen()
         application.state.scan_status = {
             "state": "queued",
@@ -314,28 +355,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "state": "queued", "started_at": None, "finished_at": None, "error": None,
         }
 
-        async def refresh_startup_pricing() -> None:
-            await initial_task
-            application.state.pricing_refresh_status.update(
-                state="running", started_at=datetime.now(UTC).isoformat(),
-            )
-            try:
-                result = await asyncio.to_thread(pricing.refresh_on_startup, active_settings.timezone)
-                if result is None:
-                    state, error = "skipped", None
-                else:
-                    error = "; ".join(
-                        f"{model}: {message}" for model, message in result["failed_models"].items()
-                    ) or None
-                    state = "partial" if error and result["updated_models"] else "error" if error else "complete"
-                application.state.pricing_refresh_status.update(state=state, error=error)
-            except Exception as exc:
-                application.state.pricing_refresh_status.update(state="error", error=str(exc))
-                logging.getLogger(__name__).exception("Startup pricing refresh failed")
-            finally:
-                application.state.pricing_refresh_status["finished_at"] = datetime.now(UTC).isoformat()
-
-        pricing_task = asyncio.create_task(refresh_startup_pricing())
+        pricing_task = asyncio.create_task(refresh_automatic_pricing(application))
         periodic_task: asyncio.Task | None = None
 
         async def sample_quota() -> None:
@@ -356,7 +376,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             while True:
                 await asyncio.sleep(active_settings.scan_interval_minutes * 60)
                 await run_scan(application)
-                await refresh_startup_pricing()
+                await refresh_automatic_pricing(application)
+
+        async def periodic_pricing() -> None:
+            while True:
+                await asyncio.sleep(PRICING_CHECK_INTERVAL_SECONDS)
+                await refresh_automatic_pricing(application)
+
+        pricing_check_task = asyncio.create_task(periodic_pricing())
 
         if active_settings.scan_interval_minutes > 0:
             periodic_task = asyncio.create_task(periodic_scan())
@@ -366,7 +393,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # A native dialog can outlive its HTTP caller. Close its child
             # process so the executor cannot keep shutdown waiting for input.
             await asyncio.to_thread(folder_picker.close)
-            tasks = [initial_task, pricing_task, quota_sampling_task]
+            tasks = [initial_task, pricing_task, pricing_check_task, quota_sampling_task]
             if periodic_task:
                 tasks.append(periodic_task)
             for task in tasks:
@@ -379,6 +406,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = active_settings
     app.state.database = database
     app.state.pricing = pricing
+    app.state.pricing_refresh_status = {
+        "state": "queued", "started_at": None, "finished_at": None, "error": None,
+    }
     app.state.scanner = scanner
     app.state.quota = quota
     app.state.session_quotas = session_quotas
@@ -579,7 +609,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if sort_by == "price_snapshot":
                 snapshot = row[sort_by]
                 return ("首次采集回填" if snapshot["inferred"] else "当时已保存价格") if snapshot else "无快照"
-            if sort_by == "api_usd_known" and row["unknown_price_calls"]:
+            if sort_by == "api_usd_known" and row["unknown_price_calls"] and not row["priced_calls"]:
                 return None
             if sort_by == "fast_surcharge_usd" and row["unknown_fast_price_calls"]:
                 return None
@@ -621,6 +651,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/scan")
     async def scan() -> dict:
         result = await run_scan(app, raise_errors=True)
+        await refresh_automatic_pricing(app)
         return result.to_dict()
 
     @app.get("/api/projects")
@@ -716,7 +747,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/pricing/refresh")
     async def refresh_pricing() -> dict:
-        return await asyncio.to_thread(pricing.refresh)
+        async with pricing_refresh_lock:
+            return await pricing_operation(pricing.refresh)
 
     @app.put("/api/pricing/models/{model}/override")
     async def set_price_override(model: str, payload: PriceOverrideRequest) -> dict:

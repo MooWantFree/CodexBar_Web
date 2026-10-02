@@ -62,6 +62,10 @@ class PricingStore:
                 key: PriceCatalog(json.loads(row["payload_json"]))
                 for key, row in revisions.items()
             }
+            current = self.catalog()
+            first_known: dict[str, dict | None] = {}
+            first_catalogs: dict[str, PriceCatalog] = {}
+            backfilled_catalogs: dict[tuple[int, str], PriceCatalog] = {}
             for event in events:
                 event.pop("_price_catalog", None)
                 snapshot = snapshots.get(event["event_id"])
@@ -80,6 +84,36 @@ class PricingStore:
                     }
                     if mode == "snapshot":
                         event["_price_catalog"] = catalogs[snapshot["revision_id"]]
+                        raw_model = event.get("pricing_model") or event.get("model")
+                        key = current.normalize_model(raw_model)
+                        if model not in saved_catalog.models and current.is_openai_model(key):
+                            if key not in first_known:
+                                first_known[key] = (
+                                    self.database.first_model_price_revision(key)
+                                    if _MODEL_PATTERN.fullmatch(key) else None
+                                )
+                            first = first_known[key]
+                            if first:
+                                if key not in first_catalogs:
+                                    first_catalogs[key] = PriceCatalog(json.loads(first["payload_json"]))
+                                known = first_catalogs[key]
+                                cache_key = (snapshot["revision_id"], key)
+                                if cache_key not in backfilled_catalogs:
+                                    payload = copy.deepcopy(saved_catalog.payload)
+                                    payload["models"][key] = copy.deepcopy(known.models[key])
+                                    raw_key = str(raw_model or "").strip().lower().removeprefix("openai/")
+                                    payload.setdefault("aliases", {})[raw_key] = key
+                                    # Keep a manual price decision from the first known revision.
+                                    if key in known.payload.get("snapshot_overrides", []):
+                                        payload.setdefault("snapshot_overrides", []).append(key)
+                                    backfilled_catalogs[cache_key] = PriceCatalog(payload)
+                                event["_price_catalog"] = backfilled_catalogs[cache_key]
+                                event["price_snapshot"].update(
+                                    inferred=True, backfilled_revision_id=first["id"],
+                                    price_date=known.as_of, observed_at=first["observed_at"],
+                                    source="override" if key in known.payload.get("snapshot_overrides", [])
+                                    else known.payload.get("snapshot_source", "unknown"),
+                                )
             return events
 
     def _base_payload(self) -> dict[str, Any]:
@@ -162,6 +196,7 @@ class PricingStore:
                 multiplier = override["api_fast_multiplier"]
                 entry["api_fast_multiplier"] = float(multiplier) if multiplier != "unknown" else None
                 entry.pop("api_usd_long_context", None)
+                entry["manual_price_override"] = True
             return PriceCatalog(payload)
 
     @staticmethod

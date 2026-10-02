@@ -179,7 +179,10 @@ def build_quota_value_report(
         if not selected and row["used_percent"] > 0:
             row.update(status="missing_usage", message="此周期没有本地调用记录，已消耗额度的金额未知。")
             continue
-        total = build_report(selected, catalog, start=None, end=None, timezone=timezone)["total"]
+        total = build_report(
+            selected, catalog, start=None, end=None, timezone=timezone,
+            fast_standard_fallback=False,
+        )["total"]
         row["total"] = total
         if row["used_percent"] == 0:
             row.update(status="no_usage", message="已消耗为 0%，无法据此外推每 1% 或整窗价值。")

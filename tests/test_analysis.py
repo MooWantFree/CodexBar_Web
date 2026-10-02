@@ -312,6 +312,37 @@ def test_session_request_sorting_precedes_pagination(tmp_path, field, direction)
     assert client.get("/api/sessions/detail", params={**params, "sort_direction": "bad"}).status_code == 400
 
 
+@pytest.mark.parametrize("direction,expected", [
+    ("ascending", ["known-zero", "standard-estimate", "known-large", "unpriced"]),
+    ("descending", ["known-large", "standard-estimate", "known-zero", "unpriced"]),
+])
+def test_session_request_sorting_includes_standard_estimates(tmp_path, monkeypatch, direction, expected):
+    app = create_app(Settings(codex_home=tmp_path, data_dir=tmp_path / "data", scan_interval_minutes=0))
+    catalog = PriceCatalog.load_default()
+    catalog.models["gpt-5.6-sol"]["api_fast_multiplier"] = None
+    monkeypatch.setattr(app.state.pricing, "catalog", lambda: catalog)
+    store_events(app.state.database, [
+        event("standard-estimate"),
+        event("known-zero", model="gpt-6.1-sol", input_tokens=0, cached_input_tokens=0, output_tokens=0),
+        event("known-large", model="gpt-6.1-sol", input_tokens=10000, output_tokens=1000),
+        event("unpriced", model="not-priced"),
+    ])
+    client = TestClient(app)
+
+    report = client.get("/api/sessions/detail", params={
+        "session": "one", "sort_by": "api_usd_known", "sort_direction": direction,
+        "price_mode": "current",
+    }).json()
+
+    rows = report["requests"]
+    assert [row["key"] for row in rows] == expected
+    estimate = next(row for row in rows if row["key"] == "standard-estimate")
+    assert estimate["api_standard_fallback"] is True
+    assert estimate["api_usd_known"] > 0
+    assert estimate["unknown_price_calls"] == estimate["priced_calls"] == 1
+    assert rows[-1]["priced_calls"] == 0
+
+
 def test_titles_use_metadata_and_survive_source_removal(tmp_path: Path):
     db = Database(tmp_path / "usage.sqlite3")
     index = tmp_path / "session_index.jsonl"

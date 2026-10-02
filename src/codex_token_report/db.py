@@ -992,6 +992,18 @@ class Database:
                 revisions[revision] = dict(row)
         return snapshots, revisions
 
+    def first_model_price_revision(self, model: str) -> dict | None:
+        path = '$.models.' + json.dumps(model)
+        with self.connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM price_revisions
+                WHERE json_extract(payload_json, ?) IS NOT NULL
+                  AND json_extract(payload_json, ?) IS NOT NULL
+                ORDER BY id LIMIT 1""",
+                (path + '.api_usd.input', path + '.api_usd.output'),
+            ).fetchone()
+        return dict(row) if row else None
+
     def save_session_titles(self, titles: dict[str, str]) -> None:
         with self.connect() as connection:
             connection.executemany(

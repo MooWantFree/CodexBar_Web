@@ -6,7 +6,7 @@ import pytest
 
 from codex_token_report.db import Database
 from codex_token_report.models_dev import CATALOG_CACHE_KEY
-from codex_token_report.pricing import PriceCatalog
+from codex_token_report.pricing import FAST_PRICING_VERSION, PriceCatalog
 from codex_token_report.pricing_store import PricingStore
 
 
@@ -139,9 +139,21 @@ def test_unversioned_snapshot_keeps_legacy_implicit_1x_repair(manual_override):
 
 
 def test_current_version_snapshot_unknown_fast_is_not_reinterpreted():
-    catalog = PriceCatalog(_snapshot(version=3))
+    catalog = PriceCatalog(_snapshot(version=FAST_PRICING_VERSION))
     assert catalog.models["gpt-6-sol"]["api_fast_multiplier"] is None
     assert _calculate(catalog).api_usd is None
+
+
+def test_gpt_6_luna_version_3_snapshot_receives_published_fast_multiplier():
+    payload = _snapshot("gpt-6-luna", version=3)
+    payload["models"]["gpt-6-luna"]["api_usd"] = {
+        "input": 0.1, "cached_input": 0.01, "cache_write": 0.125, "output": 0.5,
+    }
+    catalog = PriceCatalog(payload)
+    standard = _calculate(catalog, model="gpt-6-luna", tier="standard")
+    fast = _calculate(catalog, model="gpt-6-luna", tier="fast")
+    assert fast.api_tier_multiplier == Decimal(2)
+    assert fast.api_usd == standard.api_usd * 2
 
 
 def test_current_pricing_store_exposes_gpt_6_sol_fast_2x(tmp_path, monkeypatch):
@@ -166,7 +178,7 @@ def test_current_pricing_store_exposes_gpt_6_sol_fast_2x(tmp_path, monkeypatch):
         "input": 2, "cached_input": 0.2, "cache_write": 2.5, "output": 10,
         "api_fast_multiplier": 2,
     }
-    assert store.catalog().payload["fast_pricing_version"] == 3
+    assert store.catalog().payload["fast_pricing_version"] == FAST_PRICING_VERSION
     fast = _calculate(store.catalog(), long_context=True)
     assert fast.api_usd == Decimal("2.368")
 

@@ -31,6 +31,8 @@ def _empty_bucket(key: str) -> dict[str, Any]:
         "standard_api_usd_known": Decimal(0),
         "fast_surcharge_usd": Decimal(0),
         "unknown_fast_price_calls": 0,
+        "fast_standard_fallback_calls": 0,
+        "fast_standard_fallback_usd": Decimal(0),
         "credits_known": Decimal(0),
         "standard_credits_known": Decimal(0),
         "credit_priced_calls": 0,
@@ -38,20 +40,26 @@ def _empty_bucket(key: str) -> dict[str, Any]:
     }
 
 
-def _add_event(bucket: dict[str, Any], event: dict[str, Any], catalog: PriceCatalog) -> None:
+def _add_event(
+    bucket: dict[str, Any], event: dict[str, Any], catalog: PriceCatalog,
+    *, fast_standard_fallback: bool = True,
+) -> None:
     input_tokens = int(event["input_tokens"])
     cached = int(event["cached_input_tokens"])
     cache_write = int(event["cache_write_input_tokens"])
     output = int(event["output_tokens"])
     service_tier = str(event.get("service_tier") or "unknown")
-    result = event.get("_price_catalog", catalog).calculate(
-        model=event.get("pricing_model") or event.get("model"),
+    event_catalog = event.get("_price_catalog", catalog)
+    pricing_model = event.get("pricing_model") or event.get("model")
+    result = event_catalog.calculate(
+        model=pricing_model,
         input_tokens=input_tokens,
         cached_input_tokens=cached,
         cache_write_input_tokens=cache_write,
         output_tokens=output,
         service_tier=service_tier,
     )
+    service_tier = result.service_tier
     bucket["calls"] += 1
     bucket["inferred_price_calls"] += int(event.get("price_snapshot", {}).get("inferred", False))
     bucket["input_tokens"] += input_tokens
@@ -81,6 +89,19 @@ def _add_event(bucket: dict[str, Any], event: dict[str, Any], catalog: PriceCata
         )
     else:
         bucket["unpriced_tokens"] += input_tokens + output
+        if (
+            fast_standard_fallback
+            and service_tier == "priority"
+            and result.api_tier_multiplier is None
+            and result.standard_api_usd is not None
+            and event_catalog.can_estimate_fast_from_standard(pricing_model)
+        ):
+            # Count a displayable Standard base without claiming the Fast rate
+            # is known, adding a surcharge, or increasing price coverage.
+            bucket["priced_calls"] += 1
+            bucket["api_usd_known"] += result.standard_api_usd
+            bucket["fast_standard_fallback_calls"] += 1
+            bucket["fast_standard_fallback_usd"] += result.standard_api_usd
     if result.codex_credits is not None:
         bucket["credit_priced_calls"] += 1
         bucket["credits_known"] += result.codex_credits
@@ -92,12 +113,14 @@ def _serialize_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
     result["api_usd_known"] = float(bucket["api_usd_known"])
     result["standard_api_usd_known"] = float(bucket["standard_api_usd_known"])
     result["fast_surcharge_usd"] = float(bucket["fast_surcharge_usd"])
+    result["fast_standard_fallback_usd"] = float(bucket["fast_standard_fallback_usd"])
     result["credits_known"] = float(bucket["credits_known"])
     result["standard_credits_known"] = float(bucket["standard_credits_known"])
-    result["unknown_price_calls"] = bucket["calls"] - bucket["priced_calls"]
+    confirmed_priced_calls = bucket["priced_calls"] - bucket["fast_standard_fallback_calls"]
+    result["unknown_price_calls"] = bucket["calls"] - confirmed_priced_calls
     result["unknown_credit_calls"] = bucket["calls"] - bucket["credit_priced_calls"]
     result["price_coverage_percent"] = (
-        round(bucket["priced_calls"] / bucket["calls"] * 100, 2) if bucket["calls"] else 0
+        round(confirmed_priced_calls / bucket["calls"] * 100, 2) if bucket["calls"] else 0
     )
     result["tier_coverage_percent"] = (
         round((bucket["calls"] - bucket["unknown_tier_calls"]) / bucket["calls"] * 100, 2)
@@ -114,6 +137,7 @@ def build_report(
     start: str | None,
     end: str | None,
     timezone: str = "Asia/Taipei",
+    fast_standard_fallback: bool = True,
 ) -> dict[str, Any]:
     total = _empty_bucket("total")
     daily: dict[str, dict[str, Any]] = defaultdict(dict)
@@ -136,10 +160,11 @@ def build_report(
             daily_models[date_key][model_key]["display_name"] = catalog.display_name(
                 event.get("model")
             )
-        _add_event(total, event, catalog)
-        _add_event(daily[date_key], event, catalog)
-        _add_event(models[model_key], event, catalog)
-        _add_event(daily_models[date_key][model_key], event, catalog)
+        _add_event(total, event, catalog, fast_standard_fallback=fast_standard_fallback)
+        _add_event(daily[date_key], event, catalog, fast_standard_fallback=fast_standard_fallback)
+        _add_event(models[model_key], event, catalog, fast_standard_fallback=fast_standard_fallback)
+        _add_event(daily_models[date_key][model_key], event, catalog,
+                   fast_standard_fallback=fast_standard_fallback)
         if event.get("timestamp_utc"):
             stamp = datetime.fromisoformat(event["timestamp_utc"]).astimezone(ZoneInfo(timezone))
             # Include UTC offset to keep the two repeated DST hours distinct.
@@ -151,8 +176,10 @@ def build_report(
                 hourly_models[hour_key][model_key] = _empty_bucket(model_key)
                 hourly_models[hour_key][model_key]["model"] = model_key
                 hourly_models[hour_key][model_key]["display_name"] = catalog.display_name(model_key)
-            _add_event(hourly[hour_key], event, catalog)
-            _add_event(hourly_models[hour_key][model_key], event, catalog)
+            _add_event(hourly[hour_key], event, catalog,
+                       fast_standard_fallback=fast_standard_fallback)
+            _add_event(hourly_models[hour_key][model_key], event, catalog,
+                       fast_standard_fallback=fast_standard_fallback)
 
     daily_rows = []
     for key in sorted(daily):
@@ -408,7 +435,10 @@ def request_rows(events: list[dict], catalog: PriceCatalog) -> list[dict]:
     for event in reversed(events):
         bucket = _empty_bucket(event["event_id"])
         _add_event(bucket, event, catalog)
-        rows.append({**_serialize_bucket(bucket), "timestamp": event["timestamp_utc"],
+        serialized = _serialize_bucket(bucket)
+        rows.append({**serialized, "timestamp": event["timestamp_utc"],
+                     "api_standard_fallback": bool(bucket["fast_standard_fallback_calls"]),
+                     "api_cost_unknown": bool(serialized["unknown_price_calls"]),
                      "model": catalog.display_name(event.get("model")),
                      "model_id": str(event.get("model") or "unknown"),
                      "service_tier": event.get("service_tier") or "unknown",

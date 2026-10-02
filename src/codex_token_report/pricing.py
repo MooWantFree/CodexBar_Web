@@ -11,13 +11,14 @@ from typing import Any
 # API dollar multipliers, maintained separately from subscription credit pricing.
 # CodexBar-style table, supplemented by Sol's published model-card Fast rates.
 # https://developers.openai.com/api/docs/models/gpt-6-sol
+# https://developers.openai.com/api/docs/models/gpt-6-luna
 # https://developers.openai.com/api/docs/models/gpt-6.1-sol
 API_FAST_MULTIPLIERS = {
     "gpt-5.4": 2.0, "gpt-5.4-mini": 2.0, "gpt-5.5": 2.5,
     "gpt-5.6-sol": 2.0, "gpt-5.6-terra": 2.0, "gpt-5.6-luna": 2.0,
-    "gpt-6-astra": 2.0, "gpt-6-sol": 2.0, "gpt-6.1-sol": 2.0,
+    "gpt-6-astra": 2.0, "gpt-6-sol": 2.0, "gpt-6-luna": 2.0, "gpt-6.1-sol": 2.0,
 }
-FAST_PRICING_VERSION = 3
+FAST_PRICING_VERSION = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,25 @@ class PriceCatalog:
             if base in self.models:
                 return base
         return raw
+
+    def is_openai_model(self, model: str | None) -> bool:
+        key = self.normalize_model(model)
+        entry = self.models.get(key)
+        if not entry or "/" in key:
+            return False
+        # models.dev entries are imported exclusively from its OpenAI provider.
+        # Built-in first-party models also have documented Standard prices.
+        return entry.get("price_source") == "models_dev" or bool(
+            re.match(r"^(?:gpt-|chatgpt-|o[1-9](?:$|-))", key)
+        )
+
+    def can_estimate_fast_from_standard(self, model: str | None) -> bool:
+        key = self.normalize_model(model)
+        entry = self.models.get(key)
+        return bool(
+            entry and self.is_openai_model(key) and not entry.get("manual_price_override")
+            and key not in self.payload.get("snapshot_overrides", [])
+        )
 
     def calculate(
         self,
