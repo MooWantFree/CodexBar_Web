@@ -36,7 +36,7 @@ export function costText(row, kind = 'api', {unknownOnly = false} = {}) {
   const unknown = amountUnknown(row, kind);
   if (unknown && (unknownOnly || row?.[amountField(kind)] === null)) return t('未知');
   if (kind === 'fast') return fastSurcharge(row);
-  return `${money(row?.api_usd_known)}${unknown ? ` + ${t('未知')}` : ''}`;
+  return money(row?.api_usd_known);
 }
 
 export function CostValue({row, kind = 'api', as: Tag = 'span', unknownOnly = false, models, className = '', ...props}) {

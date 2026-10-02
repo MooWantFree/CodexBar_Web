@@ -22,7 +22,7 @@ export function formatDateTime(value, options = {}) {
 }
 export function fastSurcharge(row, precise = false) {
   const amount = money(row.fast_surcharge_usd, precise);
-  return row.unknown_fast_price_calls ? row.fast_surcharge_usd ? `${amount} + ${t('未知')}` : t('未知') : amount;
+  return row.unknown_fast_price_calls && !row.fast_surcharge_usd ? t('未知') : amount;
 }
 const colors = {'gpt-6-astra': '#7655c5', 'gpt-5.6-sol': '#277ad9', 'gpt-5.6-terra': '#2f8a57', 'gpt-5.6-luna': '#168e94', 'codex-auto-review': '#b66a12'};
 export function modelName(row) {

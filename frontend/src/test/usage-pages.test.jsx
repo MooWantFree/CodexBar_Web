@@ -55,14 +55,14 @@ describe('React analytics pages', () => {
     mount(OverviewPage, '/overview', () => ({total: {...total, unknown_price_calls: 1, unknown_credit_calls: 1}, models: [{...day.models[0], unknown_price_calls: 1}], daily: [day], hourly: [hour]}));
     await screen.findByRole('heading', {name: 'Usage by model'});
     expect(document.querySelectorAll('.kpi-card')).toHaveLength(5);
-    expect(document.getElementById('costKpi').textContent).toBe('$8 + Unknown');
-    expect(document.getElementById('costKpi').closest('article').textContent).toContain('+ Unknown');
+    expect(document.getElementById('costKpi').textContent).toBe('$8');
+    expect(document.getElementById('costKpi').closest('article').textContent).not.toContain('+ Unknown');
     expect(document.getElementById('costKpi').classList.contains('unknown-cost')).toBe(true);
     expect(document.getElementById('costKpi').title).toContain('unknown for 1 calls');
     expect(document.querySelector('#modelTable .unknown-cost').title).toContain('GPT 6 Astra');
     expect(document.getElementById('creditsKpi')).toBeNull();
     expect(screen.queryByText('Credits')).toBeNull();
-    expect(document.querySelector('#modelTable .unknown-cost').textContent).toBe('$8 + Unknown');
+    expect(document.querySelector('#modelTable .unknown-cost').textContent).toBe('$8');
     expect(document.querySelector('#tokenChart .model-segment').style.background).toBe('rgb(118, 85, 197)');
     expect(document.querySelector('#costChart .model-segment').getAttribute('title')).toContain('$8');
     expect(screen.queryByText(/calls use prices backfilled/)).toBeNull();
@@ -75,10 +75,10 @@ describe('React analytics pages', () => {
     await screen.findByText('2026-10-02');
     const rows = [...document.querySelectorAll('[data-page="daily"] tbody tr')];
     const unknown = rows.find(row => row.cells[0].textContent === partial.key).querySelectorAll('.cost-value');
-    expect(unknown[0].textContent).toBe('$8 + Unknown');
+    expect(unknown[0].textContent).toBe('$8');
     expect(unknown[0].classList.contains('unknown-cost')).toBe(true);
     expect(unknown[0].title).toContain('required Token rates');
-    expect(unknown[1].textContent).toBe('$1 + Unknown');
+    expect(unknown[1].textContent).toBe('$1');
     expect(unknown[1].classList.contains('unknown-cost')).toBe(true);
     expect(unknown[1].title).toContain('1 Fast calls');
     for (const amount of rows.find(row => row.cells[0].textContent === zero.key).querySelectorAll('.cost-value')) {

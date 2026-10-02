@@ -12,7 +12,7 @@ export const EMPTY_ROWS = [];
 export const numeric = value => Number(value || 0);
 export const fixed = (value, digits = 1) => numeric(value).toFixed(digits);
 export const priceUnknown = row => row.unknown_price_calls > 0;
-export const cost = (row, precise = false) => `${money(row.api_usd_known, precise)}${priceUnknown(row) ? ` + ${t('未知')}` : ''}`;
+export const cost = (row, precise = false) => money(row.api_usd_known, precise);
 export const projectName = row => !row.path && row.display_name === '未知项目' ? t('未知项目') : row.display_name || row.key;
 export const sessionTitle = row => row.title_generated
   ? t('会话 {id}', {id: String(row.key).slice(0, 12)}) : row.title || row.key;
