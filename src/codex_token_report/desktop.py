@@ -6,7 +6,7 @@ import time
 
 import uvicorn
 
-from .config import Settings
+from .config import SERVER_GRACEFUL_SHUTDOWN_SECONDS, Settings
 from .main import create_app
 
 
@@ -29,7 +29,8 @@ def main() -> None:
 
     settings = Settings.from_env()
     config = uvicorn.Config(
-        create_app(settings), host=settings.host, port=settings.port, log_level="warning"
+        create_app(settings), host=settings.host, port=settings.port, log_level="warning",
+        timeout_graceful_shutdown=SERVER_GRACEFUL_SHUTDOWN_SECONDS,
     )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
@@ -44,7 +45,8 @@ def main() -> None:
     )
     webview.start()
     server.should_exit = True
-    thread.join(timeout=5)
+    # Allow the HTTP grace period and native chooser termination to finish.
+    thread.join(timeout=10)
 
 
 if __name__ == "__main__":

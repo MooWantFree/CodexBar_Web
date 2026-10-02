@@ -8,7 +8,7 @@ from pathlib import Path
 
 import uvicorn
 
-from .config import Settings, load_saved_settings
+from .config import SERVER_GRACEFUL_SHUTDOWN_SECONDS, Settings, load_saved_settings
 from .db import Database
 from .main import create_app
 from .pricing_store import PricingStore
@@ -62,7 +62,10 @@ def main() -> None:
     if not args.no_browser:
         url = f"http://{settings.host}:{settings.port}"
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
-    uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level="info")
+    uvicorn.run(
+        create_app(settings), host=settings.host, port=settings.port, log_level="info",
+        timeout_graceful_shutdown=SERVER_GRACEFUL_SHUTDOWN_SECONDS,
+    )
 
 
 if __name__ == "__main__":

@@ -35,15 +35,22 @@ function mount(pathname = "/settings", { seedQuota = true } = {}) {
   return { ...result, client };
 }
 
-function mockSettingsApis({ failSave = false, failScan = false, deferSave = false } = {}) {
+function mockSettingsApis({ failSave = false, failScan = false, deferSave = false, pickerPath = replacementHome, failPicker = false, deferPicker = false } = {}) {
   let settings = { codex_home: originalHome, codex_home_exists: true };
   let releaseSave;
+  let releasePicker;
   const requests = [];
   vi.stubGlobal("fetch", vi.fn(async (path, options = {}) => {
     const method = options.method || "GET";
     const body = options.body && JSON.parse(options.body);
     requests.push({ path, method, body });
     if (path === "/api/settings" && method === "GET") return response(settings);
+    if (path === "/api/settings/select-folder" && method === "POST") {
+      if (failPicker) return response({ detail: "无法打开系统文件夹选择器，请手工填写目录。" }, 503);
+      const selected = response({ path: pickerPath });
+      if (deferPicker) return new Promise(resolve => { releasePicker = () => resolve(selected); });
+      return selected;
+    }
     if (path === "/api/settings" && method === "PUT") {
       if (failSave) return response({ detail: "Codex 目录不存在，请选择已有目录。" }, 400);
       settings = { codex_home: body.codex_home, codex_home_exists: true };
@@ -60,7 +67,7 @@ function mockSettingsApis({ failSave = false, failScan = false, deferSave = fals
     if (path === "/api/pricing") return response(pricing);
     throw new Error(`Unexpected API request: ${method} ${path}`);
   }));
-  return { requests, releaseSave: () => releaseSave?.() };
+  return { requests, releaseSave: () => releaseSave?.(), releasePicker: () => releasePicker?.() };
 }
 
 async function ready() {
@@ -92,6 +99,7 @@ describe("settings navigation and language", () => {
     expect(screen.getByRole('heading', {level: 1, name: '设置'})).toBeTruthy();
     expect(screen.getByRole('heading', {name: '模型价格管理'})).toBeTruthy();
     expect(screen.getByRole('button', {name: '刷新价格'})).toBeTruthy();
+    expect(screen.getByRole('button', {name: '选择文件夹'})).toBeTruthy();
     expect(screen.getByLabelText('Codex 日志目录').value).toBe(draft);
     expect(document.documentElement.lang).toBe('zh');
     expect(document.title).toBe('设置 · Codex Token Report');
@@ -132,6 +140,7 @@ describe("settings navigation and language", () => {
     expect(screen.getByRole("heading", { level: 1, name: "設定" })).toBeTruthy();
     expect(screen.getByLabelText("Codexログディレクトリ").value).toBe(draft);
     expect(screen.getByLabelText("表示言語").value).toBe("ja");
+    expect(screen.getByRole("button", { name: "フォルダーを選択" })).toBeTruthy();
     expect(screen.getByTestId("formatted").textContent).toContain("1万");
     expect(screen.getByTestId("formatted").textContent).toContain("2026/10/02 01:03");
     expect(document.title).toBe("設定 · Codex Token Report");
@@ -166,6 +175,73 @@ describe("settings navigation and language", () => {
 });
 
 describe("log directory settings", () => {
+  it("fills the native folder selection without applying it until Save and scan is clicked", async () => {
+    const { requests } = mockSettingsApis();
+    mount();
+    await ready();
+    const draft = "E:\\Draft directory\\手动输入";
+    fireEvent.change(directoryInput(), { target: { value: draft } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(directoryInput().value).toBe(replacementHome));
+    expect(requests.find(request => request.path === "/api/settings/select-folder")).toEqual({
+      path: "/api/settings/select-folder", method: "POST", body: { initial_path: draft },
+    });
+    expect(configuration().codexHome).toBe(originalHome);
+    expect(document.querySelector("footer code").textContent).toBe(originalHome);
+    expect(requests.some(request => request.method === "PUT" || request.path === "/api/scan")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Save and scan" }));
+    await waitFor(() => expect(configuration().codexHome).toBe(replacementHome));
+    expect(requests.find(request => request.method === "PUT").body).toEqual({ codex_home: replacementHome });
+    await screen.findByText("Log directory saved.");
+  });
+
+  it("retains a manually entered draft when the system dialog is canceled", async () => {
+    const { requests } = mockSettingsApis({ pickerPath: null });
+    mount();
+    await ready();
+    const draft = "E:\\Draft directory\\取消选择";
+    fireEvent.change(directoryInput(), { target: { value: draft } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Choose folder" }).disabled).toBe(false));
+    expect(directoryInput().value).toBe(draft);
+    expect(configuration().codexHome).toBe(originalHome);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(requests.filter(request => request.method === "POST")).toHaveLength(1);
+    expect(requests.some(request => request.method === "PUT")).toBe(false);
+  });
+
+  it("shows a localized picker error and keeps manual directory entry available", async () => {
+    mockSettingsApis({ failPicker: true });
+    mount();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not open the system folder picker. Enter the directory manually.");
+    expect(directoryInput().disabled).toBe(false);
+    fireEvent.change(directoryInput(), { target: { value: replacementHome } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and scan" }));
+    await waitFor(() => expect(configuration().codexHome).toBe(replacementHome));
+  });
+
+  it("prevents duplicate dialogs and saving while a folder selection is pending", async () => {
+    const { requests, releasePicker } = mockSettingsApis({ deferPicker: true });
+    mount();
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Choosing…" }).disabled).toBe(true));
+    expect(directoryInput().disabled).toBe(true);
+    const saveButton = screen.getByRole("button", { name: "Save and scan" });
+    expect(saveButton.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Choosing…" }));
+    fireEvent.click(saveButton);
+    expect(requests.filter(request => request.path === "/api/settings/select-folder")).toHaveLength(1);
+    expect(requests.some(request => request.method === "PUT" || request.path === "/api/scan")).toBe(false);
+    await act(async () => releasePicker());
+    expect(directoryInput().value).toBe(replacementHome);
+    expect(directoryInput().disabled).toBe(false);
+    expect(screen.getByRole("button", { name: "Choose folder" }).disabled).toBe(false);
+    expect(saveButton.disabled).toBe(false);
+  });
+
   it("saves the directory before scanning, then updates the footer, bounds, and account quota state", async () => {
     const { requests } = mockSettingsApis();
     const { client } = mount();

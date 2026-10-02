@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from .db import Database
 
 CODEX_HOME_METADATA_KEY = "settings.codex_home"
+SERVER_GRACEFUL_SHUTDOWN_SECONDS = 2
 
 
 def _default_codex_home() -> Path:

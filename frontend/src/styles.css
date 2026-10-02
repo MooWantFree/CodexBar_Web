@@ -334,8 +334,10 @@ code { color: #53647c; }
 .settings-form { display: grid; gap: 16px; }
 .settings-field { display: grid; gap: 9px; min-width: 0; }
 .settings-field > label { color: var(--text); font-size: 12px; font-weight: 600; }
-.settings-field > input, .settings-field > select { min-width: 0; padding: 10px 12px; color: var(--text); border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.settings-field > input { width: 100%; }
+.settings-directory-control { display: flex; gap: 10px; min-width: 0; }
+.settings-directory-control > input, .settings-field > select { min-width: 0; padding: 10px 12px; color: var(--text); border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.settings-directory-control > input { flex: 1; width: 100%; }
+.settings-directory-control > button { flex-shrink: 0; white-space: nowrap; }
 .settings-field > select { width: min(100%, 280px); }
 .settings-field .fine-print { margin: 0; }
 .settings-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
@@ -363,6 +365,7 @@ code { color: #53647c; }
   .price-layout { grid-template-columns: 1fr; gap: 5px; }
 }
 @media (max-width: 650px) {
+  .settings-directory-control { flex-direction: column; align-items: stretch; }
   .quota-value-intro, .quota-value-card, .quota-value-notes, .quota-value-history, .quota-value-history-detail { padding: 16px; }
   .quota-value-metrics { gap: 10px; }
   .quota-value-metrics div { padding: 12px; }

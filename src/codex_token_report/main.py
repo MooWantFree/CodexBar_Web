@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import ipaddress
 import json
 import logging
 import re
 import sqlite3
+import threading
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
@@ -14,6 +16,7 @@ from decimal import Decimal
 from functools import partial
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -25,6 +28,7 @@ from pydantic import BaseModel, field_validator
 
 from .config import CODEX_HOME_METADATA_KEY, Settings, load_saved_settings, validate_codex_home
 from .db import Database
+from .folder_picker import FolderPicker
 from .pricing_store import PricingStore
 from .quota import QuotaService
 from .quota_value import build_quota_value_report
@@ -150,6 +154,48 @@ class DirectorySettingsRequest(BaseModel):
     codex_home: str
 
 
+class FolderPickerRequest(BaseModel):
+    initial_path: str = ""
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or bool(
+        isinstance(address, ipaddress.IPv6Address)
+        and address.ipv4_mapped and address.ipv4_mapped.is_loopback
+    )
+
+
+def _check_picker_origin(request: Request) -> None:
+    if (
+        not request.client or not _is_loopback_host(request.client.host)
+        or not request.url.hostname or not _is_loopback_host(request.url.hostname)
+    ):
+        raise HTTPException(status_code=403, detail="只能从本机页面打开文件夹选择器。")
+    origin = request.headers.get("origin")
+    if origin is None:
+        return
+    try:
+        source = urlsplit(origin)
+        source_port = source.port or (443 if source.scheme == "https" else 80)
+        target_port = request.url.port or (443 if request.url.scheme == "https" else 80)
+        same_origin = (
+            source.scheme == request.url.scheme
+            and source.hostname == request.url.hostname and source_port == target_port
+            and not source.username and not source.password
+            and not source.path and not source.query and not source.fragment
+        )
+    except ValueError:
+        same_origin = False
+    if not same_origin:
+        raise HTTPException(status_code=403, detail="只能从本机页面打开文件夹选择器。")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or Settings.from_env()
     database = Database(active_settings.database_path)
@@ -173,6 +219,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     quota_condition = asyncio.Condition()
     quota_tasks: set[asyncio.Task] = set()
     quota_switching = False
+    folder_picker_lock = threading.Lock()
+    folder_picker = FolderPicker()
 
     async def release_quota_task(task):
         async with quota_condition:
@@ -254,6 +302,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        folder_picker.reopen()
         application.state.scan_status = {
             "state": "queued",
             "started_at": None,
@@ -314,6 +363,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
+            # A native dialog can outlive its HTTP caller. Close its child
+            # process so the executor cannot keep shutdown waiting for input.
+            await asyncio.to_thread(folder_picker.close)
             tasks = [initial_task, pricing_task, quota_sampling_task]
             if periodic_task:
                 tasks.append(periodic_task)
@@ -330,6 +382,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.scanner = scanner
     app.state.quota = quota
     app.state.session_quotas = session_quotas
+    app.state.folder_picker = folder_picker
 
     def report_range(
         start: str | None = Query(default=None), end: str | None = Query(default=None),
@@ -377,6 +430,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except OSError:
             exists = False
         return {"codex_home": str(snapshot.codex_home), "codex_home_exists": exists}
+
+    @app.post("/api/settings/select-folder")
+    async def select_folder(payload: FolderPickerRequest, request: Request) -> dict:
+        _check_picker_origin(request)
+        if not folder_picker_lock.acquire(blocking=False):
+            raise HTTPException(status_code=409, detail="文件夹选择器已打开，请先完成或取消选择。")
+        fallback = active_settings.codex_home
+
+        def run_picker():
+            try:
+                return folder_picker.choose(payload.initial_path, fallback)
+            finally:
+                # Cancellation of the HTTP request does not close the native
+                # dialog; keep it reserved until its worker actually finishes.
+                folder_picker_lock.release()
+
+        picker_task = asyncio.create_task(asyncio.to_thread(run_picker))
+
+        def release_picker_result(completed):
+            if not completed.cancelled():
+                completed.exception()
+
+        picker_task.add_done_callback(release_picker_result)
+        try:
+            path = await asyncio.shield(picker_task)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503, detail="无法打开系统文件夹选择器，请手工填写目录。",
+            ) from exc
+        return {"path": path}
 
     @app.put("/api/settings")
     async def update_settings(payload: DirectorySettingsRequest) -> dict:

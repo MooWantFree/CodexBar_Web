@@ -7,9 +7,11 @@ const messages = {
   'APPLICATION SETTINGS': ['APPLICATION SETTINGS', 'アプリ設定'],
   '日志与界面': ['Logs and interface', 'ログと表示'],
   'Codex 日志目录': ['Codex log directory', 'Codexログディレクトリ'],
-  '选择 Codex 主目录，包含 sessions、archived_sessions 或 logs_2.sqlite。保存后自动扫描，已有历史记录继续保留。': [
-    'Select the Codex home directory containing sessions, archived_sessions, or logs_2.sqlite. Saving scans this directory and keeps your saved history.',
-    'sessions、archived_sessions、または logs_2.sqlite を含む Codex のホームディレクトリを指定してください。保存するとスキャンが実行され、保存済みの履歴は保持されます。',
+  '选择文件夹': ['Choose folder', 'フォルダーを選択'],
+  '正在选择…': ['Choosing…', '選択中…'],
+  '手动填写或选择本机文件夹，目录需包含 sessions、archived_sessions 或 logs_2.sqlite。点击保存后自动扫描，已有历史记录继续保留。': [
+    'Enter a path or choose a folder on this computer containing sessions, archived_sessions, or logs_2.sqlite. Click Save and scan to apply it and keep your saved history.',
+    'sessions、archived_sessions、または logs_2.sqlite を含む、このコンピューターのフォルダーを入力または選択してください。「保存してスキャン」で適用され、保存済みの履歴は保持されます。',
   ],
   '显示语言': ['Interface language', '表示言語'],
   '跟随浏览器': ['Follow browser', 'ブラウザーに合わせる'],
