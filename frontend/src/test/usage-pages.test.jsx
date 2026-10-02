@@ -56,7 +56,10 @@ describe('React analytics pages', () => {
     mount(OverviewPage, '/overview', () => ({total: {...total, unknown_price_calls: 1, unknown_credit_calls: 1}, models: [{...day.models[0], unknown_price_calls: 1}], daily: [day], hourly: [hour]}));
     await screen.findByRole('heading', {name: 'Usage by model'});
     expect(document.querySelectorAll('.kpi-card')).toHaveLength(6);
-    expect(document.getElementById('costKpi').textContent).toBe('$8.00 + Unknown');
+    expect(document.getElementById('costKpi').textContent).toBe('$8.00');
+    expect(document.getElementById('costKpi').closest('article').textContent).toContain('+ Unknown');
+    expect(document.getElementById('creditsKpi').textContent).toBe('3');
+    expect(document.getElementById('creditsKpi').closest('article').textContent).toContain('+ Unknown');
     expect(document.getElementById('modelTable').textContent).toContain('$8.00 + Unknown');
     expect(document.querySelector('#tokenChart .model-segment').style.background).toBe('rgb(118, 85, 197)');
     expect(document.querySelector('#costChart .model-segment').getAttribute('title')).toContain('$8.00');
