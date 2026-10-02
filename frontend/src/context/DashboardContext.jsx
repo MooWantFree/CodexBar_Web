@@ -5,6 +5,7 @@ import {apiGet, apiPost, apiPut} from '../lib/api';
 import {readRange, rangeQuery} from '../lib/range';
 
 const DashboardContext = createContext(null);
+export const QUOTA_POLL_INTERVAL_MS = 65_000;
 
 export function offlineQuota(snapshot, error) {
   if (!error) return snapshot;
@@ -34,7 +35,6 @@ export function DashboardProvider({config, children}) {
     for (const key of ['session', 'session_scope']) if (params.has(key)) nextParams.set(key, params.get(key));
     setParams(nextParams, {replace: true});
   }, [range, params, setParams]);
-  const quotaQuery = useQuery({queryKey: ['quota'], queryFn: ({signal}) => apiGet('/api/quota', {signal}), staleTime: Infinity});
   const quotaMutation = useMutation({
     onMutate: () => client.cancelQueries({predicate: query => query.queryKey[0] === 'quota' || String(query.queryKey[0]).startsWith('quota-value')}),
     mutationFn: () => apiPost('/api/quota/refresh'),
@@ -72,12 +72,22 @@ export function DashboardProvider({config, children}) {
       }
     },
   });
-  const quotaError = quotaMutation.error || quotaQuery.error;
+  const quotaQuery = useQuery({
+    queryKey: ['quota'],
+    queryFn: ({signal}) => apiGet('/api/quota', {signal}),
+    enabled: !quotaMutation.isPending && !settingsMutation.isPending,
+    staleTime: QUOTA_POLL_INTERVAL_MS,
+    refetchInterval: QUOTA_POLL_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
+  // A later automatic read can recover from a failed manual refresh.
+  const quotaError = quotaQuery.error || (quotaMutation.error && quotaMutation.submittedAt >= quotaQuery.dataUpdatedAt ? quotaMutation.error : null);
   const quota = useMemo(() => offlineQuota(quotaQuery.data, quotaError), [quotaQuery.data, quotaError]);
   const refreshUsage = useCallback(() => client.invalidateQueries({predicate: query => query.queryKey[0] !== 'quota'}), [client]);
   const value = {
     ...activeConfig, range, setRange, queryString, rangeKey: queryString(),
-    quota, quotaLoading: quotaQuery.isPending || quotaQuery.isFetching,
+    quota, quotaLoading: quotaQuery.isPending || (quotaQuery.isFetching && !quotaQuery.data),
     quotaError,
     quotaRefreshing: quotaMutation.isPending,
     refreshQuota: quotaMutation.mutateAsync,

@@ -47,10 +47,11 @@ export function QuotaValuePage() {
   const mode = range.priceMode;
   const identity = `${scope}:${mode}`;
   const version = quota?.checked_at || quota?.fetched_at || quota?.history_fetched_at || "initial";
-  const historyIdentity = `${identity}:${version}:${page}`;
+  const historyIdentity = `${identity}:${page}`;
   const selectedID = selection?.identity === historyIdentity ? selection.id : null;
   const lastCurrent = useRef(null), lastHistory = useRef(null);
   const detailPanel = useRef(null), detailTrigger = useRef(null);
+  const focusedDetail = useRef(null);
   const enabled = Boolean(quota) && !quotaLoading && !quotaRefreshing && !scanning && !refreshing;
   const current = useQuery({ queryKey: ["quota-value", scope, mode, version], enabled, queryFn: async ({ signal }) => {
     const report = await apiGet(`/api/quota/value?${new URLSearchParams({ price_mode: mode })}`, { signal });
@@ -68,7 +69,15 @@ export function QuotaValuePage() {
     return report;
   } });
   useEffect(() => { setPage(0); setSelection(null); setActionError(null); }, [identity]);
-  useEffect(() => { if (detail.data && selectedID != null) { detailPanel.current?.focus(); detailPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); } }, [detail.data, selectedID]);
+  useEffect(() => {
+    if (selectedID == null) { focusedDetail.current = null; return; }
+    const key = `${identity}:${selectedID}`;
+    if (detail.data && focusedDetail.current !== key) {
+      focusedDetail.current = key;
+      detailPanel.current?.focus();
+      detailPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+  }, [detail.data, selectedID, identity]);
   if (current.data?.status === "ready") lastCurrent.current = { identity, report: current.data };
   if (history.data?.status === "ready") lastHistory.current = { identity, report: history.data };
   const report = current.data || (lastCurrent.current?.identity === identity ? lastCurrent.current.report : null);

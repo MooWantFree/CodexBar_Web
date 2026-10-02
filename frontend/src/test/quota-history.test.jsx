@@ -125,6 +125,35 @@ describe("quota saved history", () => {
     expect(document.querySelector("#quotaValueWindows").textContent).not.toContain("$8.00");
   });
 
+  it("keeps cycle details open without moving focus when an automatic reading updates", async () => {
+    mockQuotaApis();
+    const { client } = mount(<QuotaValuePage />);
+    fireEvent.click(await screen.findByText("View readings"));
+    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8.00"));
+    const refresh = document.querySelector("#refreshQuotaValueButton");
+    refresh.focus();
+    const fetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(path => path.startsWith("/api/quota/value/history/")
+      ? Promise.resolve(response({ status: "ready", cycle, observations: [{ ...cycle, total: { ...cycle.total, api_usd_known: 16 } }] }))
+      : fetch(path)));
+    act(() => client.setQueryData(["quota"], { ...offlineQuota, checked_at: "2026-10-01T03:00:00Z" }));
+    expect(document.querySelector("#quotaValueHistoryDetail")).not.toBeNull();
+    await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$16.00"));
+    expect(document.activeElement).toBe(refresh);
+  });
+
+  it("keeps reset expiration dates open for the same account and closes them on an account switch", async () => {
+    const quota = { ...liveQuota, reset_credits_available: 1, reset_credits: [{ title: "Full reset", expires_at: 1793300934 }] };
+    const { client } = mount(<QuotaSidebar />, quota);
+    fireEvent.click(screen.getByRole("button", { name: "Available quota resets: 1" }));
+    expect(document.querySelector("#quotaResetPopover").open).toBe(true);
+    act(() => client.setQueryData(["quota"], { ...quota, checked_at: "2026-10-01T03:00:00Z", reset_credits: [{ title: "Updated reset" }] }));
+    await screen.findByText("Updated reset");
+    expect(document.querySelector("#quotaResetPopover").open).toBe(true);
+    act(() => client.setQueryData(["quota"], { ...quota, reset_history_scope: "account-b" }));
+    await waitFor(() => expect(document.querySelector("#quotaResetPopover").open).toBe(false));
+  });
+
   it("shows raw archive failures without hiding usable values", async () => {
     mockQuotaApis({ value: { status: "ready", fetched_at: savedAt, price_mode: "snapshot", windows: [cycle] } });
     mount(<><QuotaSidebar /><QuotaValuePage /></>, { ...liveQuota, archive_status: "error", reset_history_status: "error", value_history_status: "error" });

@@ -40,6 +40,8 @@ from .reports import (
 from .scanner import SessionScanner
 from .session_quota import SessionQuotaHistory
 
+QUOTA_SAMPLE_INTERVAL_SECONDS = 65
+
 
 def _validate_date(value: str | None, field: str) -> str | None:
     if value is None or value == "":
@@ -180,7 +182,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not task.cancelled():
             task.exception()
 
-    async def quota_operation(method, **kwargs):
+    async def quota_operation(method, *, wait_on_cancel: bool = False, **kwargs):
         # Admit parallel reads so QuotaService still coalesces simultaneous
         # forced refreshes. A directory switch blocks admissions and waits for
         # these workers, including those whose HTTP caller has disconnected.
@@ -192,7 +194,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             task = asyncio.create_task(asyncio.to_thread(operation, **kwargs))
             quota_tasks.add(task)
             task.add_done_callback(lambda completed: asyncio.create_task(release_quota_task(completed)))
-        return await asyncio.shield(task)
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if wait_on_cancel:
+                # The sampler owns this worker; finish its bounded RPC before
+                # shutdown rather than leave it writing after the lifespan.
+                with suppress(Exception):
+                    await asyncio.shield(task)
+            raise
 
     @asynccontextmanager
     async def switch_quota_directory():
@@ -279,6 +289,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         pricing_task = asyncio.create_task(refresh_startup_pricing())
         periodic_task: asyncio.Task | None = None
 
+        async def sample_quota() -> None:
+            force = False
+            while True:
+                try:
+                    await quota_operation("read", force=force, wait_on_cancel=True)
+                except Exception:
+                    logging.getLogger(__name__).exception("Automatic quota sampling failed")
+                # Start with a baseline, then collect fresh evidence even when
+                # no browser is open. Spacing reads also confirms early resets.
+                force = True
+                await asyncio.sleep(QUOTA_SAMPLE_INTERVAL_SECONDS)
+
+        quota_sampling_task = asyncio.create_task(sample_quota())
+
         async def periodic_scan() -> None:
             while True:
                 await asyncio.sleep(active_settings.scan_interval_minutes * 60)
@@ -290,13 +314,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
-            tasks = [initial_task, pricing_task]
+            tasks = [initial_task, pricing_task, quota_sampling_task]
             if periodic_task:
                 tasks.append(periodic_task)
             for task in tasks:
                 task.cancel()
             with suppress(asyncio.CancelledError):
-                await asyncio.gather(*tasks)
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     app = FastAPI(title="Codex Token Report", version="0.5.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=package_dir / "static"), name="static")
@@ -563,7 +587,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         price_mode: Literal["current", "snapshot"] = Query(default="snapshot"),
     ) -> dict:
         def value_report(service):
-            # Reuse the last explicit read so navigating never fetches live quotas.
+            # Reuse the latest snapshot; navigation does not need another live read.
             snapshot = service.cached or QuotaService._empty("unavailable", "请先读取账号额度。")
             report = service.saved_value(price_mode=price_mode)
             if report is None:

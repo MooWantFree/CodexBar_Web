@@ -12,7 +12,7 @@ export function QuotaSidebar() {
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(timer); }, []);
-  useEffect(() => { dialog.current?.close?.(); setOpen(false); }, [quota]);
+  useEffect(() => { dialog.current?.close?.(); setOpen(false); }, [quota?.reset_history_scope, quota?.status]);
   const ready = quota?.status === "ready";
   const windows = ready ? quota.windows || [] : [];
   const credits = quota?.reset_credits || [];
