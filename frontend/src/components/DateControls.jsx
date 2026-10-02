@@ -13,11 +13,12 @@ addMessages({
     '请选择结束日期 · 同一天也可选择': 'Select the end date · The same day is allowed',
     '结束时间不能早于开始时间，请调整日期或时分': 'The end time cannot precede the start time. Adjust the date or time.',
     '当前范围精确到重置时刻；手动修改日期或时分后按分钟筛选。': 'This range uses exact reset times. Editing the date or time switches to minute precision.',
-    '加粗日期': 'Bold dates', '表示已确认的额度重置日 · 日期选完或修改时间后自动更新统计。': 'mark confirmed quota resets · Statistics update after selecting dates or changing the time.',
+    '加粗日期': 'Bold dates', '表示额度重置记录（含推测）· 日期选完或修改时间后自动更新统计。': 'mark quota reset records, including estimates · Statistics update after selecting dates or changing the time.',
     '选择日期范围，{start} 至 {end}': 'Select date range, {start} to {end}',
     '未来日期不可选': 'Future dates are unavailable', '每周额度': 'Weekly quota',
     '{hours} 小时额度': '{hours}-hour quota', '{minutes} 分钟额度': '{minutes}-minute quota',
     '{window}已重置': '{window} reset',
+    '{window}重置（推测）': '{window} reset (estimated)',
     '按当前价格重算 · 已包含 Fast API 加价': 'Recalculated at current prices · Includes the Fast API surcharge',
     '按调用时已保存的价格估算 · 已包含 Fast API 加价': 'Estimated at saved prices · Includes the Fast API surcharge',
     '快照估算 · {count} 次调用使用首次采集价格回填': 'Saved price estimate · {count} calls use the first collected price',
@@ -36,11 +37,12 @@ addMessages({
     '请选择结束日期 · 同一天也可选择': '終了日を選択してください · 同じ日も選択できます',
     '结束时间不能早于开始时间，请调整日期或时分': '終了時刻を開始時刻より前にはできません。日付または時刻を調整してください。',
     '当前范围精确到重置时刻；手动修改日期或时分后按分钟筛选。': '現在の範囲は正確なリセット時刻を使用しています。日付や時刻を変更すると分単位の絞り込みに切り替わります。',
-    '加粗日期': '太字の日付', '表示已确认的额度重置日 · 日期选完或修改时间后自动更新统计。': 'は確認済みの利用枠リセット日です · 日付の選択や時刻の変更後に統計が自動更新されます。',
+    '加粗日期': '太字の日付', '表示额度重置记录（含推测）· 日期选完或修改时间后自动更新统计。': 'は利用枠のリセット記録（推定を含む）です · 日付の選択や時刻の変更後に統計が自動更新されます。',
     '选择日期范围，{start} 至 {end}': '日付範囲を選択、{start} から {end}',
     '未来日期不可选': '未来の日付は選択できません', '每周额度': '週間利用枠',
     '{hours} 小时额度': '{hours} 時間の利用枠', '{minutes} 分钟额度': '{minutes} 分の利用枠',
     '{window}已重置': '{window}がリセット済み',
+    '{window}重置（推测）': '{window}リセット（推定）',
     '按当前价格重算 · 已包含 Fast API 加价': '現在の料金で再計算 · Fast API の追加料金を含む',
     '按调用时已保存的价格估算 · 已包含 Fast API 加价': '保存済み料金で推計 · Fast API の追加料金を含む',
     '快照估算 · {count} 次调用使用首次采集价格回填': '保存済み料金で推計 · {count} 回の呼び出しに初回取得料金を適用',
@@ -121,19 +123,22 @@ export default function DateControls() {
 
   const resetDates = useMemo(() => {
     const dates = new Map();
-    for (const event of quota?.reset_events || []) {
-      if (!parseDate(event.date) || event.date > today) continue;
+    const records = Array.isArray(quota?.reset_records) ? quota.reset_records : quota?.reset_events || [];
+    for (const event of records) {
+      const date = localFields(event.reset_at)?.date || event.date;
+      if (!parseDate(date) || date > today) continue;
       const minutes = Number(event.window_minutes);
       if (!Number.isFinite(minutes) || minutes <= 0) continue;
       const window = minutes === 10080 ? t('每周额度') : minutes % 60 === 0
         ? t('{hours} 小时额度', { hours: minutes / 60 }) : t('{minutes} 分钟额度', { minutes });
       const label = event.limit_id === 'codex' ? window : `${event.limit_name || event.limit_id} · ${window}`;
-      const labels = dates.get(event.date) || new Set();
-      labels.add(t('{window}已重置', { window: label }));
-      dates.set(event.date, labels);
+      const labels = dates.get(date) || new Set();
+      const estimated = event.confidence === 'estimated' || event.method === 'estimated';
+      labels.add(t(estimated ? '{window}重置（推测）' : '{window}已重置', { window: label }));
+      dates.set(date, labels);
     }
     return dates;
-  }, [quota?.reset_events, today, locale]);
+  }, [quota?.reset_records, quota?.reset_events, today, locale]);
 
   const exactStart = localFields(range.startAt);
   const exactEnd = localFields(range.endAt);
@@ -345,7 +350,7 @@ export default function DateControls() {
             </section>)}
           </div>
           {exact && <p id="calendarPrecision" className="fine-print">{t('当前范围精确到重置时刻；手动修改日期或时分后按分钟筛选。')}</p>}
-          <p className="calendar-footer"><strong>{t('加粗日期')}</strong> {t('表示已确认的额度重置日 · 日期选完或修改时间后自动更新统计。')}</p>
+          <p className="calendar-footer"><strong>{t('加粗日期')}</strong> {t('表示额度重置记录（含推测）· 日期选完或修改时间后自动更新统计。')}</p>
         </dialog>
       </div>
     </div>

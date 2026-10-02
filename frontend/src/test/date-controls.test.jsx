@@ -17,12 +17,13 @@ async function loadComponent(language = 'en-US') {
 }
 function mount(initialRange = baseRange, quota = {}) {
   const setRange = vi.fn();
-  function Harness() {
+  function Harness({ quota }) {
     const [range, updateRange] = useState(initialRange);
     dashboard.current = { range, quota, setRange: patch => { setRange(patch); updateRange(previous => ({ ...previous, ...patch })); } };
     return <DateControls />;
   }
-  return { ...render(<Harness />), setRange };
+  const view = render(<Harness quota={quota} />);
+  return { ...view, setRange, rerenderQuota: next => view.rerender(<Harness quota={next} />) };
 }
 const day = value => document.querySelector(`button[data-date="${value}"]`);
 const openPicker = () => fireEvent.click(screen.getByRole('button', { name: /^Select date range,/ }));
@@ -102,6 +103,96 @@ describe('date controls', () => {
     expect(day('2026-10-03').getAttribute('aria-label')).toContain('未来の日付は選択できません');
     expect(day('2026-10-03').className).not.toContain('quota-reset-day');
     expect(document.querySelector('#calendarMonth1').textContent).toBe('2026年10月');
+  });
+  it('highlights estimated history beside confirmed resets without treating an estimated time as an estimated event', () => {
+    vi.setSystemTime(new Date('2026-10-03T02:00:00Z'));
+    const estimated = { date: '2026-09-27', reset_at: '2026-09-27T05:16:11+08:00', window_minutes: 10080, limit_id: 'codex', method: 'estimated', confidence: 'estimated' };
+    const confirmed = { date: '2026-10-03', reset_at: '2026-10-03T05:14:00+08:00', window_minutes: 10080, limit_id: 'codex', method: 'early', confidence: 'confirmed', time_estimated: true };
+    mount(baseRange, { reset_records: [estimated, confirmed], reset_events: [confirmed] });
+    openPicker();
+    expect(day('2026-09-27').className).toContain('quota-reset-day');
+    expect(day('2026-09-27').title).toBe('Weekly quota reset (estimated)');
+    expect(day('2026-09-27').getAttribute('aria-label')).toContain('Weekly quota reset (estimated)');
+    expect(day('2026-10-03').className).toContain('quota-reset-day');
+    expect(day('2026-10-03').title).toBe('Weekly quota reset');
+    expect(day('2026-10-03').getAttribute('aria-label')).not.toContain('(estimated)');
+    expect(document.querySelector('.calendar-footer').textContent).toContain('including estimates');
+  });
+  it('keeps an explicitly empty record list from restoring stale legacy events', () => {
+    mount(baseRange, {
+      reset_records: [],
+      reset_events: [{ date: '2026-09-27', window_minutes: 10080, limit_id: 'codex' }],
+    });
+    openPicker();
+    expect(day('2026-09-27').className).not.toContain('quota-reset-day');
+    expect(day('2026-09-27').getAttribute('title')).toBeNull();
+  });
+  it('continues highlighting legacy snapshots that only contain reset events', () => {
+    mount(baseRange, { reset_events: [{ date: '2026-09-27', window_minutes: 300, limit_id: 'codex' }] });
+    openPicker();
+    expect(day('2026-09-27').className).toContain('quota-reset-day');
+    expect(day('2026-09-27').title).toBe('5-hour quota reset');
+  });
+  it.each([
+    ['Asia/Taipei', '2026-09-27', '2026-09-26'],
+    ['America/Los_Angeles', '2026-09-26', '2026-09-27'],
+  ])('uses the reset timestamp in %s instead of a previously stored date', (timezone, actualDate, staleDate) => {
+    document.body.dataset.timezone = timezone;
+    mount(baseRange, { reset_records: [{
+      date: staleDate, reset_at: '2026-09-26T21:16:11Z', window_minutes: 10080,
+      limit_id: 'codex', method: 'estimated', confidence: 'estimated',
+    }] });
+    openPicker();
+    expect(day(actualDate).className).toContain('quota-reset-day');
+    expect(day(staleDate).className).not.toContain('quota-reset-day');
+  });
+  it('falls back to valid record dates when timestamps are missing or invalid', () => {
+    mount(baseRange, { reset_records: [
+      { date: '2026-09-25', window_minutes: 10080, limit_id: 'codex', confidence: 'estimated' },
+      { date: '2026-09-26', reset_at: 'invalid timestamp', window_minutes: 300, limit_id: 'codex', method: 'regular' },
+      { date: '2026-09-31', reset_at: 'invalid timestamp', window_minutes: 10080, limit_id: 'codex' },
+      { date: 'invalid date', window_minutes: 10080, limit_id: 'codex' },
+    ] });
+    openPicker();
+    expect(day('2026-09-25').title).toBe('Weekly quota reset (estimated)');
+    expect(day('2026-09-26').title).toBe('5-hour quota reset');
+    expect(document.querySelectorAll('.quota-reset-day')).toHaveLength(2);
+  });
+  it('does not highlight future record timestamps even when their stored dates are in the past', () => {
+    mount(baseRange, { reset_records: [{
+      date: '2026-09-27', reset_at: '2026-10-03T05:14:00+08:00', window_minutes: 10080,
+      limit_id: 'codex', method: 'early', confidence: 'confirmed',
+    }] });
+    openPicker();
+    expect(day('2026-09-27').className).not.toContain('quota-reset-day');
+    expect(day('2026-10-03').disabled).toBe(true);
+    expect(day('2026-10-03').className).not.toContain('quota-reset-day');
+    expect(document.querySelectorAll('.quota-reset-day')).toHaveLength(0);
+  });
+  it('updates an open calendar when automatic reads replace the record list', () => {
+    const quota = { reset_records: [], reset_events: [] };
+    const { rerenderQuota } = mount(baseRange, quota);
+    openPicker();
+    expect(day('2026-09-27').className).not.toContain('quota-reset-day');
+    rerenderQuota({ ...quota, reset_records: [{
+      date: '2026-09-27', reset_at: '2026-09-27T05:16:11+08:00', window_minutes: 10080,
+      limit_id: 'codex', method: 'estimated', confidence: 'estimated',
+    }] });
+    expect(document.querySelector('#dateRangeDialog').open).toBe(true);
+    expect(day('2026-09-27').title).toBe('Weekly quota reset (estimated)');
+    expect(day('2026-09-27').className).toContain('quota-reset-day');
+    rerenderQuota({ ...quota, reset_records: [] });
+    expect(day('2026-09-27').className).not.toContain('quota-reset-day');
+    expect(day('2026-09-27').getAttribute('title')).toBeNull();
+  });
+  it('localizes estimated record tooltips in Japanese', async () => {
+    await loadComponent('ja-JP');
+    mount(baseRange, { reset_records: [{
+      date: '2026-09-27', window_minutes: 10080, limit_id: 'codex', method: 'estimated',
+    }] });
+    fireEvent.click(screen.getByRole('button', { name: /^日付範囲を選択、/ }));
+    expect(day('2026-09-27').title).toBe('週間利用枠リセット（推定）');
+    expect(day('2026-09-27').getAttribute('aria-label')).toContain('週間利用枠リセット（推定）');
   });
   it('moves keyboard focus between months and clamps forward navigation to today', () => {
     mount(); openPicker(); fireEvent.keyDown(day('2026-10-01'), { key: 'ArrowRight' });
