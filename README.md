@@ -21,6 +21,10 @@ Windows版本的codexbar总是统计不了当日用量, 于是纯Vibe Coding做�
 API 等价金额属于估算, 不是订阅账单. 当前调用统计尚未按账号区分, 额度换算和跨机
 历史显示的限制见下方“当前账号额度”和“备份与跨机迁移”. 
 
+API Fast 倍率采用 CodexBar 的硬编码表方式维护, 与订阅 Credits 倍率分开.
+GPT-6 Sol 按[官方模型定价](https://developers.openai.com/api/docs/models/gpt-6-sol)使用 2×.
+旧快照缺失的已知 Fast 倍率会在读取时补齐, 保留当时的 Token 单价、日期和手工覆盖.
+
 ## 应用截图
 
 用量总览: 

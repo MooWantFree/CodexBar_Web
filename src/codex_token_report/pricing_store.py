@@ -14,7 +14,7 @@ import httpx
 
 from .db import Database
 from .models_dev import CATALOG_CACHE_KEY, CATALOG_URL, fetch_catalog, parse_model, valid_models
-from .pricing import API_FAST_MULTIPLIERS, PriceCatalog
+from .pricing import API_FAST_MULTIPLIERS, FAST_PRICING_VERSION, PriceCatalog
 
 _DOCS_HOST = "developers.openai.com"
 _MODEL_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -104,6 +104,8 @@ class PricingStore:
                     continue
                 self._apply_model(payload, model, parsed, cache["fetched_at"])
             payload["as_of"] = cache["fetched_at"][:10]
+        for model, entry in payload["models"].items():
+            entry["api_fast_multiplier"] = API_FAST_MULTIPLIERS.get(model)
         return payload
 
     @staticmethod
@@ -136,9 +138,7 @@ class PricingStore:
     def catalog(self) -> PriceCatalog:
         with self._lock:
             payload = copy.deepcopy(self._base_payload())
-            for model, entry in payload["models"].items():
-                entry["api_fast_multiplier"] = API_FAST_MULTIPLIERS.get(model)
-            payload["fast_pricing_version"] = 2
+            payload["fast_pricing_version"] = FAST_PRICING_VERSION
             overrides = self.database.get_pricing_overrides()
             for model, override in overrides.items():
                 entry = payload["models"].setdefault(

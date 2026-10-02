@@ -9,12 +9,15 @@ from importlib.resources import files
 from typing import Any
 
 # API dollar multipliers, maintained separately from subscription credit pricing.
-# CodexBar table, plus GPT-6.1 Sol's published model-card Fast rate.
+# CodexBar-style table, supplemented by Sol's published model-card Fast rates.
+# https://developers.openai.com/api/docs/models/gpt-6-sol
+# https://developers.openai.com/api/docs/models/gpt-6.1-sol
 API_FAST_MULTIPLIERS = {
     "gpt-5.4": 2.0, "gpt-5.4-mini": 2.0, "gpt-5.5": 2.5,
     "gpt-5.6-sol": 2.0, "gpt-5.6-terra": 2.0, "gpt-5.6-luna": 2.0,
-    "gpt-6-astra": 2.0, "gpt-6.1-sol": 2.0,
+    "gpt-6-astra": 2.0, "gpt-6-sol": 2.0, "gpt-6.1-sol": 2.0,
 }
+FAST_PRICING_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,11 +39,18 @@ class PriceCatalog:
         payload = copy.deepcopy(payload)
         # Repair the former implicit 1x default when reading old snapshots. Preserve
         # explicit user overrides and the original Standard rates/date in the snapshot.
-        if payload.get("snapshot_source") and not payload.get("fast_pricing_version"):
+        saved_fast_version = payload.get("fast_pricing_version") or 0
+        if payload.get("snapshot_source") and saved_fast_version < FAST_PRICING_VERSION:
             overridden = payload.get("snapshot_overrides", [])
             for model, entry in payload["models"].items():
-                if model not in overridden:
+                if model in overridden:
+                    continue
+                if not saved_fast_version:
                     entry["api_fast_multiplier"] = API_FAST_MULTIPLIERS.get(model)
+                elif entry.get("api_fast_multiplier") is None and model in API_FAST_MULTIPLIERS:
+                    # Fill previously unknown Fast rates without replacing saved
+                    # numeric multipliers, Standard rates, or snapshot dates.
+                    entry["api_fast_multiplier"] = API_FAST_MULTIPLIERS[model]
         self.payload = payload
         self.as_of = str(payload["as_of"])
         self.currency = str(payload["currency"])
