@@ -11,11 +11,12 @@ Windows版本的codexbar总是统计不了当日用量, 于是纯Vibe Coding做�
 | 功能 | 可以查看或操作 |
 | --- | --- |
 | 用量总览 | Input、Cache read、Cache write、Output、模型用量、Standard/Fast 等价美元与 Credits 估算; 支持按天、按小时和精确时间范围统计. 无公开价格模型的用量单独保留. |
-| 模型定价 | models.dev 价格缓存、手工覆盖、调用时保存的价格快照, 以及按当前价格重算. |
+| 设置与模型定价 | 设置 Codex 日志目录和界面语言; 管理 models.dev 价格缓存、手工覆盖、调用时保存的价格快照, 以及按当前价格重算. |
 | 项目与会话 | 按 Git 项目归并用量; 查看父子会话树、搜索和排序会话, 展开逐调用明细与趋势. |
 | 额度与重置 | 当前登录账号的实时额度读数、确认或推测的重置时刻、周期美元换算、保存的历史与离线查看. |
 | 历史持久化 | 保存逐调用 Token、档位证据、会话元数据、价格快照和已采集额度; 源日志清空、归档或截断后继续保留. |
 | CSV 导出 | 导出当前日期范围、统计粒度和价格口径下的用量明细. |
+| 界面语言 | 中文、英语与日语, 默认按浏览器语言选择, 其他语言回退到英语; 可在设置中手动选择, 切换立即生效. |
 
 API 等价金额属于估算, 不是订阅账单. 当前调用统计尚未按账号区分, 额度换算和跨机
 历史显示的限制见下方“当前账号额度”和“备份与跨机迁移”. 
@@ -50,13 +51,9 @@ uv run codex-token-report
 
 默认打开 `http://127.0.0.1:8765`. 
 
-```powershell
-.\codex_ana.bat
-```
-
 ### macOS / Linux（终端）
 
-两者使用相同的浏览器服务入口, 分别在 macOS 的终端或 Linux 的 shell 中运行: 
+两者使用相同的浏览器服务入口, Shell 中运行: 
 
 ```sh
 uv sync --locked
@@ -65,7 +62,7 @@ uv run codex-token-report
 
 默认地址 `http://127.0.0.1:8765`. 实时额度查询需要当前终端的 `PATH` 中存在
 `codex`, 或通过 `CODEX_TOKEN_REPORT_CODEX_BIN` 指定可执行文件; Windows 桌面版 CLI
-的自动查找逻辑不适用于 macOS / Linux. 例如在这两个平台的 shell 中设置: 
+的自动查找逻辑不适用于 macOS / Linux. 需在 Shell 中设置: 
 
 ```sh
 export CODEX_TOKEN_REPORT_CODEX_BIN="/path/to/codex"
@@ -77,6 +74,11 @@ export CODEX_TOKEN_REPORT_CODEX_BIN="/path/to/codex"
 > 首次启动扫描所选 Codex 目录中的 `sessions`、`archived_sessions` 和 `logs_2.sqlite`. 
 > 默认读取环境变量 `CODEX_HOME`, 未设置时使用当前用户主目录下的 `.codex`: Windows
 > 为 `$env:USERPROFILE\.codex`, macOS / Linux 为 `~/.codex`. 通过 `--codex-home` 可以覆盖. 
+>
+> 也可在网页“设置”中选择含 `sessions`、`archived_sessions` 或 `logs_2.sqlite` 的 Codex
+> 主目录. 目录必须已存在且可读; 点击“保存并扫描”后立即切换并扫描, 已有统计和历史继续保留.
+> 目录设置随统计数据库持久保存, 后续启动与 `--scan-only` 默认继续使用.
+> 显式 `--codex-home` 优先于保存的设置; 未保存时才读取 `CODEX_HOME` 或默认目录.
 >
 > 统计数据库默认位于 Windows 的 `$env:LOCALAPPDATA\CodexTokenReport\usage.sqlite3`, 
 > macOS / Linux 为 `~/.local/share/codex-token-report/usage.sqlite3`. 可通过 `--data-dir`
@@ -118,6 +120,18 @@ uv sync --locked --extra dev
 uv run ruff check src tests scripts
 uv run pytest
 ```
+
+WebUI 使用 React, 源码位于 `frontend/`, 按页面、共享组件、数据请求和翻译模块拆分.
+生产构建随 Python 包分发, 正常启动不需要 Node.js. 修改前端需安装 Node.js 20 或更新版本:
+
+```powershell
+cd frontend
+npm ci
+npm test
+npm run build
+```
+
+热更新开发和扩展方式见 [前端开发说明](frontend/README.md).
 
 # 感谢
 

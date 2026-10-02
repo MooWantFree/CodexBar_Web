@@ -169,11 +169,20 @@ def test_page_routes_and_project_api(tmp_path: Path) -> None:
     )
 
     with TestClient(app) as client:
-        for path in ("/", "/overview", "/pricing", "/daily", "/projects", "/resets"):
+        for path in ("/", "/overview", "/pricing", "/daily", "/projects", "/resets",
+                     "/sessions", "/quota-value"):
             response = client.get(path)
             assert response.status_code == 200
             assert "Codex Report" in response.text
-            assert 'data-days="1">今天' in response.text
+            assert '<div id="root"></div>' in response.text
+            assert '/static/webui/app.js?v=' in response.text
+            assert 'data-timezone=' in response.text
+        assert client.get("/static/webui/app.js").status_code == 200
+        assert client.get("/static/webui/styles.css").status_code == 200
+        config = client.get("/api/ui-config").json()
+        assert config["minimumDate"] == "2026-09-20"
+        assert config["timezone"] == app.state.settings.timezone
+        assert config["codexHome"] == str(codex_home)
 
         projects = client.get("/api/projects?start=2026-09-20&end=2026-09-20")
         assert projects.status_code == 200

@@ -280,7 +280,9 @@ def _session_bucket(key: str, titles: dict, metadata: dict) -> dict:
     parent = str(info.get("parent_session_id") or "").strip() or None
     bucket.update({
         "title": titles.get(key) or f"会话 {key[:12]}",
-        "projects": set(), "models": set(), "last_activity": "",
+        "title_generated": not bool(titles.get(key)),
+        "projects": set(), "models": set(), "project_entries": {}, "model_entries": {},
+        "last_activity": "",
         "is_subagent": bool(info.get("is_subagent")), "parent_session_id": parent,
     })
     return bucket
@@ -288,14 +290,27 @@ def _session_bucket(key: str, titles: dict, metadata: dict) -> dict:
 
 def _add_session_event(bucket: dict, event: dict, catalog: PriceCatalog) -> None:
     _add_event(bucket, event, catalog)
-    bucket["projects"].add(_project_fields(event)[1])
-    bucket["models"].add(catalog.display_name(event.get("model")))
+    project_key, project_name, project_path = _project_fields(event)
+    model_key = str(event.get("model") or "unknown")
+    model_name = catalog.display_name(event.get("model"))
+    bucket["projects"].add(project_name)
+    bucket["models"].add(model_name)
+    bucket["project_entries"][project_key] = {
+        "key": project_key, "display_name": project_name, "path": project_path,
+    }
+    bucket["model_entries"][model_key] = {"key": model_key, "display_name": model_name}
     bucket["last_activity"] = max(bucket["last_activity"], event["timestamp_utc"])
 
 
 def _serialize_session(bucket: dict) -> dict:
-    return {**_serialize_bucket(bucket), "projects": sorted(bucket["projects"]),
-            "models": sorted(bucket["models"])}
+    return {
+        **_serialize_bucket(bucket), "projects": sorted(bucket["projects"]),
+        "models": sorted(bucket["models"]),
+        "project_entries": sorted(bucket["project_entries"].values(),
+                                  key=lambda entry: (entry["display_name"], entry["key"])),
+        "model_entries": sorted(bucket["model_entries"].values(),
+                                key=lambda entry: (entry["display_name"], entry["key"])),
+    }
 
 
 def _session_lineage(key: str, metadata: dict) -> tuple[str, list[str], bool]:
@@ -395,6 +410,7 @@ def request_rows(events: list[dict], catalog: PriceCatalog) -> list[dict]:
         _add_event(bucket, event, catalog)
         rows.append({**_serialize_bucket(bucket), "timestamp": event["timestamp_utc"],
                      "model": catalog.display_name(event.get("model")),
+                     "model_id": str(event.get("model") or "unknown"),
                      "service_tier": event.get("service_tier") or "unknown",
                      "price_snapshot": event.get("price_snapshot")})
     return rows

@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -22,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, field_validator
 
-from .config import Settings
+from .config import CODEX_HOME_METADATA_KEY, Settings, load_saved_settings, validate_codex_home
 from .db import Database
 from .pricing_store import PricingStore
 from .quota import QuotaService
@@ -143,9 +144,14 @@ class PriceOverrideRequest(BaseModel):
         return value
 
 
+class DirectorySettingsRequest(BaseModel):
+    codex_home: str
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or Settings.from_env()
     database = Database(active_settings.database_path)
+    active_settings = load_saved_settings(active_settings, database)
     pricing = PricingStore(database=database)
     value_history = QuotaValueHistory(database, pricing, active_settings.timezone)
     quota = QuotaService(
@@ -162,6 +168,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=package_dir / "templates")
 
     scan_lock = asyncio.Lock()
+    quota_condition = asyncio.Condition()
+    quota_tasks: set[asyncio.Task] = set()
+    quota_switching = False
+
+    async def release_quota_task(task):
+        async with quota_condition:
+            quota_tasks.discard(task)
+            quota_condition.notify_all()
+        # A disconnected caller may no longer await the task's exception.
+        if not task.cancelled():
+            task.exception()
+
+    async def quota_operation(method, **kwargs):
+        # Admit parallel reads so QuotaService still coalesces simultaneous
+        # forced refreshes. A directory switch blocks admissions and waits for
+        # these workers, including those whose HTTP caller has disconnected.
+        async with quota_condition:
+            await quota_condition.wait_for(lambda: not quota_switching)
+            quota_tasks.difference_update(task for task in tuple(quota_tasks) if task.done())
+            service = quota
+            operation = getattr(service, method) if isinstance(method, str) else partial(method, service)
+            task = asyncio.create_task(asyncio.to_thread(operation, **kwargs))
+            quota_tasks.add(task)
+            task.add_done_callback(lambda completed: asyncio.create_task(release_quota_task(completed)))
+        return await asyncio.shield(task)
+
+    @asynccontextmanager
+    async def switch_quota_directory():
+        nonlocal quota_switching
+        async with quota_condition:
+            quota_switching = True
+            try:
+                quota_tasks.difference_update(task for task in tuple(quota_tasks) if task.done())
+                await quota_condition.wait_for(lambda: all(task.done() for task in quota_tasks))
+                quota_tasks.clear()
+            except BaseException:
+                quota_switching = False
+                quota_condition.notify_all()
+                raise
+        try:
+            yield
+        finally:
+            async with quota_condition:
+                quota_switching = False
+                quota_condition.notify_all()
 
     async def run_scan(application: FastAPI, *, raise_errors: bool = False):
         async with scan_lock:
@@ -281,32 +332,83 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def request_validation_error(_: Request, _exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": "请求参数无效"})
 
+    def ui_config() -> dict[str, str]:
+        today = datetime.now(ZoneInfo(active_settings.timezone)).date().isoformat()
+        bounds = database.date_bounds()
+        return {
+            "defaultStart": today, "defaultEnd": today,
+            "minimumDate": bounds[0] or today, "maximumDate": bounds[1] or today,
+            "timezone": active_settings.timezone, "codexHome": str(active_settings.codex_home),
+        }
+
+    @app.get("/api/ui-config")
+    async def frontend_config() -> dict[str, str]:
+        return ui_config()
+
+    @app.get("/api/settings")
+    async def get_settings() -> dict:
+        snapshot = active_settings
+        try:
+            exists = await asyncio.to_thread(snapshot.codex_home.is_dir)
+        except OSError:
+            exists = False
+        return {"codex_home": str(snapshot.codex_home), "codex_home_exists": exists}
+
+    @app.put("/api/settings")
+    async def update_settings(payload: DirectorySettingsRequest) -> dict:
+        nonlocal active_settings, scanner, quota
+        try:
+            path = await asyncio.to_thread(validate_codex_home, payload.codex_home)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        async with scan_lock, switch_quota_directory():
+            # Validate again after any in-flight scan/read has finished, since a
+            # removable source can disappear while this request waits.
+            try:
+                path = await asyncio.to_thread(validate_codex_home, str(path))
+                updated = replace(active_settings, codex_home=path)
+                new_scanner = await asyncio.to_thread(
+                    SessionScanner, codex_home=path, database=database,
+                    timezone=updated.timezone,
+                )
+                new_quota = await asyncio.to_thread(
+                    QuotaService, path, database=database, timezone=updated.timezone,
+                    value_history=value_history,
+                )
+                await asyncio.to_thread(database.set_metadata, CODEX_HOME_METADATA_KEY, str(path))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except (sqlite3.Error, OSError) as exc:
+                raise HTTPException(status_code=503, detail="保存 Codex 目录失败，请稍后重试。") from exc
+            active_settings, scanner, quota = updated, new_scanner, new_quota
+            app.state.settings = active_settings
+            app.state.scanner = scanner
+            app.state.quota = quota
+            return {"codex_home": str(path), "codex_home_exists": True, "ui_config": ui_config()}
+
     @app.get("/", response_class=HTMLResponse)
     @app.get("/overview", response_class=HTMLResponse)
     @app.get("/pricing", response_class=HTMLResponse)
+    @app.get("/settings", response_class=HTMLResponse)
     @app.get("/daily", response_class=HTMLResponse)
     @app.get("/projects", response_class=HTMLResponse)
     @app.get("/resets", response_class=HTMLResponse)
     @app.get("/quota-value", response_class=HTMLResponse)
     @app.get("/sessions", response_class=HTMLResponse)
     async def index(request: Request) -> HTMLResponse:
-        end = datetime.now(ZoneInfo(active_settings.timezone)).date()
-        start = end
-        bounds = database.date_bounds()
-        pricing_state = pricing.public_state()
+        config = ui_config()
         return templates.TemplateResponse(
             request=request,
             name="index.html",
             context={
-                "default_start": start.isoformat(),
-                "default_end": end.isoformat(),
-                "minimum_date": bounds[0] or start.isoformat(),
-                "maximum_date": bounds[1] or end.isoformat(),
-                "codex_home": str(active_settings.codex_home),
-                "timezone": active_settings.timezone,
-                "pricing_as_of": pricing_state["as_of"],
-                "styles_version": (package_dir / "static" / "styles.css").stat().st_mtime_ns,
-                "app_version": (package_dir / "static" / "app.js").stat().st_mtime_ns,
+                "default_start": config["defaultStart"],
+                "default_end": config["defaultEnd"],
+                "minimum_date": config["minimumDate"],
+                "maximum_date": config["maximumDate"],
+                "codex_home": config["codexHome"],
+                "timezone": config["timezone"],
+                "styles_version": (package_dir / "static" / "webui" / "styles.css").stat().st_mtime_ns,
+                "app_version": (package_dir / "static" / "webui" / "app.js").stat().st_mtime_ns,
             },
         )
 
@@ -450,27 +552,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/quota")
     async def get_quota() -> dict:
-        return await asyncio.to_thread(quota.read)
+        return await quota_operation("read")
 
     @app.post("/api/quota/refresh")
     async def refresh_quota() -> dict:
-        return await asyncio.to_thread(quota.read, force=True)
+        return await quota_operation("read", force=True)
 
     @app.get("/api/quota/value")
     async def quota_value(
         price_mode: Literal["current", "snapshot"] = Query(default="snapshot"),
     ) -> dict:
-        # Reuse the last explicit read so navigating never fetches live quotas.
-        snapshot = quota.cached or QuotaService._empty("unavailable", "请先读取账号额度。")
-        report = await asyncio.to_thread(quota.saved_value, price_mode=price_mode)
-        if report is None:
-            report = await asyncio.to_thread(
-                build_quota_value_report, snapshot, database, pricing,
-                price_mode=price_mode, timezone=active_settings.timezone,
-            )
-            report.update({name: snapshot.get(name) for name in (
-                "history_mode", "history_label", "history_fetched_at",
-            )})
+        def value_report(service):
+            # Reuse the last explicit read so navigating never fetches live quotas.
+            snapshot = service.cached or QuotaService._empty("unavailable", "请先读取账号额度。")
+            report = service.saved_value(price_mode=price_mode)
+            if report is None:
+                report = build_quota_value_report(
+                    snapshot, database, pricing,
+                    price_mode=price_mode, timezone=active_settings.timezone,
+                )
+                report.update({name: snapshot.get(name) for name in (
+                    "history_mode", "history_label", "history_fetched_at",
+                )})
+            return report
+
+        report = await quota_operation(value_report)
         last_scan = database.get_metadata("last_scan")
         report["last_scan"] = json.loads(last_scan) if last_scan else None
         return report
@@ -481,8 +587,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         offset: int = Query(default=0, ge=0), limit: int = Query(default=20, ge=1, le=100),
     ) -> dict:
         try:
-            return await asyncio.to_thread(
-                quota.value_records, price_mode=price_mode, offset=offset, limit=limit,
+            return await quota_operation(
+                "value_records", price_mode=price_mode, offset=offset, limit=limit,
             )
         except (sqlite3.Error, OSError, ValueError, TypeError) as exc:
             raise HTTPException(status_code=503, detail="额度历史读取失败，请稍后重试。") from exc
@@ -492,8 +598,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cycle_id: int, price_mode: Literal["current", "snapshot"] = Query(default="snapshot"),
     ) -> dict:
         try:
-            result = await asyncio.to_thread(
-                quota.value_observations, cycle_id, price_mode=price_mode,
+            result = await quota_operation(
+                "value_observations", cycle_id=cycle_id, price_mode=price_mode,
             )
         except (sqlite3.Error, OSError, ValueError, TypeError) as exc:
             raise HTTPException(status_code=503, detail="额度读数历史读取失败，请稍后重试。") from exc

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import uvicorn
 
-from .config import Settings
+from .config import Settings, load_saved_settings
 from .db import Database
 from .main import create_app
 from .pricing_store import PricingStore
@@ -49,6 +49,7 @@ def main() -> None:
     settings = _settings(args)
     if args.scan_only:
         database = Database(settings.database_path)
+        settings = load_saved_settings(settings, database)
         PricingStore(database=database)
         scanner = SessionScanner(
             codex_home=settings.codex_home,

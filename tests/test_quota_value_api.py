@@ -25,8 +25,8 @@ def test_menu_and_empty_snapshot_do_not_fetch_quota(app):
     client = TestClient(app)
     page = client.get("/quota-value")
     assert page.status_code == 200
-    assert 'href="/quota-value" data-route="quota-value"' in page.text
-    assert 'id="quotaValueWindows"' in page.text
+    assert '<div id="root"></div>' in page.text
+    assert '/static/webui/app.js?v=' in page.text
     result = client.get("/api/quota/value").json()
     assert result["status"] == "unavailable"
     assert result["windows"] == []
