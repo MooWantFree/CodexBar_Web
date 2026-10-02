@@ -32,6 +32,8 @@ const messages = [
   ['Fast API 加价', 'Fast API surcharge', 'Fast API 追加料金'],
   ['档位覆盖', 'Tier coverage', 'ティアカバー率'],
   ['价格覆盖', 'Price coverage', '価格カバー率'],
+  ['价格覆盖 {percent}%', 'Price coverage {percent}%', '価格カバー率 {percent}%'],
+  ['{calls} 次调用 · {tokens} Token', '{calls} calls · {tokens} Token', '{calls} 回の呼び出し · {tokens} Token'],
   ['API 等价美元加价；订阅内 Fast 额度消耗是 Standard 的 2.5 倍', 'API equivalent USD surcharge; Fast uses 2.5 times the Standard subscription quota', 'API 相当 USD の追加料金。サブスクリプション内の Fast のクォータ消費は Standard の 2.5 倍です'],
   ['快照估算 · {count} 次调用使用首次采集价格回填', 'Snapshot estimate · {count} calls use prices backfilled at first collection', 'スナップショット推定 · {count} 回の呼び出しは初回収集時の価格で補完されています'],
   ['首次采集回填属于估算，无法确认调用当时的官方价格。', 'Backfilled prices are estimates; the official price at the time of the call cannot be confirmed.', '初回収集時の補完価格は推定であり、呼び出し時点の公式価格は確認できません。'],

@@ -5,6 +5,7 @@ import {MemoryRouter, useLocation} from 'react-router-dom';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {DashboardProvider, useDashboard} from '../context/DashboardContext';
 import {DailyPage, OverviewPage, ProjectsPage, SessionsPage, sessionMatches, sortUsageRows} from '../pages/UsagePages';
+import {CostValue} from '../components/CostValue';
 
 const total = {calls: 2, input_tokens: 100, uncached_input_tokens: 60, cached_input_tokens: 40, output_tokens: 20, reasoning_output_tokens: 5,
   total_tokens: 120, api_usd_known: 8, priced_calls: 2, unknown_price_calls: 0, price_coverage_percent: 100, fast_calls: 1, fast_tokens: 50,
@@ -54,13 +55,87 @@ describe('React analytics pages', () => {
     mount(OverviewPage, '/overview', () => ({total: {...total, unknown_price_calls: 1, unknown_credit_calls: 1}, models: [{...day.models[0], unknown_price_calls: 1}], daily: [day], hourly: [hour]}));
     await screen.findByRole('heading', {name: 'Usage by model'});
     expect(document.querySelectorAll('.kpi-card')).toHaveLength(5);
-    expect(document.getElementById('costKpi').textContent).toBe('$8');
+    expect(document.getElementById('costKpi').textContent).toBe('$8 + Unknown');
     expect(document.getElementById('costKpi').closest('article').textContent).toContain('+ Unknown');
+    expect(document.getElementById('costKpi').classList.contains('unknown-cost')).toBe(true);
+    expect(document.getElementById('costKpi').title).toContain('unknown for 1 calls');
+    expect(document.querySelector('#modelTable .unknown-cost').title).toContain('GPT 6 Astra');
     expect(document.getElementById('creditsKpi')).toBeNull();
-    expect(document.getElementById('modelTable').textContent).toContain('$8 + Unknown');
+    expect(screen.queryByText('Credits')).toBeNull();
+    expect(document.querySelector('#modelTable .unknown-cost').textContent).toBe('$8 + Unknown');
     expect(document.querySelector('#tokenChart .model-segment').style.background).toBe('rgb(118, 85, 197)');
     expect(document.querySelector('#costChart .model-segment').getAttribute('title')).toContain('$8');
-    expect(screen.getByText(/calls use prices backfilled/)).toBeTruthy();
+    expect(screen.queryByText(/calls use prices backfilled/)).toBeNull();
+  });
+
+  it('explains unknown API and Fast amounts in the daily ledger while leaving known zero costs unchanged', async () => {
+    const partial = {...day, unknown_price_calls: 1, unknown_fast_price_calls: 1};
+    const zero = {...day, key: '2026-10-02', api_usd_known: 0, fast_surcharge_usd: 0};
+    mount(DailyPage, '/daily', () => ({total, daily: [partial, zero], hourly: [hour]}));
+    await screen.findByText('2026-10-02');
+    const rows = [...document.querySelectorAll('[data-page="daily"] tbody tr')];
+    const unknown = rows.find(row => row.cells[0].textContent === partial.key).querySelectorAll('.cost-value');
+    expect(unknown[0].textContent).toBe('$8 + Unknown');
+    expect(unknown[0].classList.contains('unknown-cost')).toBe(true);
+    expect(unknown[0].title).toContain('required Token rates');
+    expect(unknown[1].textContent).toBe('$1 + Unknown');
+    expect(unknown[1].classList.contains('unknown-cost')).toBe(true);
+    expect(unknown[1].title).toContain('1 Fast calls');
+    for (const amount of rows.find(row => row.cells[0].textContent === zero.key).querySelectorAll('.cost-value')) {
+      expect(amount.textContent).toBe('$0');
+      expect(amount.classList.contains('unknown-cost')).toBe(false);
+      expect(amount.hasAttribute('title')).toBe(false);
+    }
+  });
+
+  it('explains unpriced model calls in project totals, charts and the project ledger', async () => {
+    const partial = {...day, unknown_price_calls: 1, unknown_fast_price_calls: 1,
+      models: [{...day.models[0], unknown_price_calls: 1, unknown_fast_price_calls: 1}]};
+    const project = {...partial, key: 'project-a', display_name: 'Project A', path: 'E:\\Code\\A'};
+    mount(ProjectsPage, '/projects', url => url.pathname === '/api/projects' ? {projects: [project]} : {project, total: partial, daily: [partial], hourly: [hour]});
+    await screen.findByRole('heading', {name: 'Project A · usage trend'});
+    expect(document.querySelectorAll('#projectTable .unknown-cost')).toHaveLength(2);
+    expect(document.querySelector('#projectTable .unknown-cost').title).toContain('GPT 6 Astra');
+    expect(document.querySelector('#projectTotalCostChart .unknown-cost').title).toContain('unknown for 1 calls');
+    expect(document.querySelector('#projectCostChart .unknown-cost').title).toContain('GPT 6 Astra');
+    expect(document.querySelectorAll('#projectDetail table .unknown-cost')).toHaveLength(1);
+  });
+
+  it('explains unknown session amounts in the ranking, summary, request total and each affected request', async () => {
+    const partial = {...total, unknown_price_calls: 1, unknown_fast_price_calls: 1};
+    mount(SessionsPage, '/sessions', url => {
+      const response = sessionDispatch(url);
+      if (url.pathname === '/api/sessions') return {...response, sessions: [{...group, ...partial}]};
+      return {...response, total: partial, requests: [
+        {...response.requests[0], key: 'unknown', model: 'Unpriced model', model_id: 'unpriced-model', api_usd_known: 0, priced_calls: 0,
+          unknown_price_calls: 1, fast_surcharge_usd: 0, unknown_fast_price_calls: 1},
+        {...response.requests[0], key: 'known-zero', api_usd_known: 0, fast_surcharge_usd: 0, service_tier: 'standard'},
+      ], request_count: 2};
+    });
+    await screen.findByRole('heading', {name: 'Parent session · Session total'});
+    expect(document.querySelectorAll('#sessionTable .unknown-cost')).toHaveLength(2);
+    expect(document.querySelectorAll('#sessionDetailSummary .unknown-cost')).toHaveLength(2);
+    const requests = document.querySelectorAll('#requestTable tr');
+    expect(requests[0].querySelectorAll('.unknown-cost')).toHaveLength(2);
+    const unknown = requests[1].querySelectorAll('.cost-value');
+    expect(unknown[0].textContent).toBe('Unknown');
+    expect(unknown[0].title).toContain('Unpriced model');
+    expect(unknown[1].textContent).toBe('Unknown');
+    expect(unknown[1].title).toContain('Fast multiplier');
+    expect(requests[1].querySelectorAll('.unknown-cost')).toHaveLength(2);
+    expect(requests[2].querySelectorAll('.unknown-cost')).toHaveLength(0);
+    expect([...requests[2].querySelectorAll('.cost-value')].map(amount => amount.textContent)).toEqual(['$0', '$0']);
+  });
+
+  it('explains an explicitly missing amount without marking a known zero as unknown', () => {
+    const {container} = render(<><CostValue row={{api_usd_known: null}}/><CostValue row={{api_usd_known: 0, unknown_price_calls: 0}}/></>);
+    const amounts = container.querySelectorAll('.cost-value');
+    expect(amounts[0].textContent).toBe('Unknown');
+    expect(amounts[0].title).toContain('Required pricing information is missing');
+    expect(amounts[0].classList.contains('unknown-cost')).toBe(true);
+    expect(amounts[1].textContent).toBe('$0');
+    expect(amounts[1].hasAttribute('title')).toBe(false);
+    expect(amounts[1].classList.contains('unknown-cost')).toBe(false);
   });
 
   it('keeps exact ranges, price basis and hourly grain in the CSV export', async () => {

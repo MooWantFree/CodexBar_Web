@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {t, addMessages, locale} from '../lib/i18n';
-import {formatNumber, formatCompact, money, fastSurcharge, modelColor, modelName} from '../lib/format';
+import {formatNumber, formatCompact, modelColor, modelName} from '../lib/format';
+import {CostValue, unknownCostTitle, costText} from './CostValue';
 
 addMessages({
   en: {'暂无数据': 'No data', '正在读取…': 'Loading…', '上一页': 'Previous', '下一页': 'Next', '日期': 'Date', '调用': 'Calls', '普通输入': 'Uncached input', '缓存输入': 'Cached input', '缓存': 'Cached', '总 Token': 'Total tokens', 'API 等价': 'API equivalent', 'Fast API 加价': 'Fast API surcharge', '档位覆盖': 'Tier coverage', '价格覆盖': 'Price coverage', '定价覆盖 {percent}% 调用': 'Pricing covers {percent}% of calls', '定价 {percent}%': 'Priced {percent}%', '未知': 'Unknown', '升序': 'ascending', '降序': 'descending', '{label}：点击按{direction}排序': '{label}: sort {direction}', '这个日期范围还没有可统计的记录。': 'No records in this date range.'},
@@ -20,8 +21,8 @@ export function StackedChart({rows = [], metric = 'total_tokens'}) {
   const max = Math.max(...rows.map(row => row[metric] || 0), Number.EPSILON);
   return <>{[...rows].reverse().map(row => <div className="chart-row" key={row.key}>
     <span className="chart-date" title={row.key}>{row.label || row.key?.slice(5)}</span>
-    <div className="chart-track">{(row.models || []).filter(model => model[metric] > 0).map(model => <span key={model.model || model.key} className="segment model-segment" style={{width: `${model[metric] / max * 100}%`, background: modelColor(model.model || model.key)}} title={`${modelName(model)}\n${isCost ? money(model[metric], true) : formatNumber(model[metric])}${isCost ? `\n${t('定价覆盖 {percent}% 调用', {percent: model.price_coverage_percent?.toFixed(1)})}` : ''}`} />)}</div>
-    <span className="chart-value">{isCost ? row.unknown_price_calls && !row.priced_calls ? t('未知') : money(row[metric], true) : formatCompact(row[metric])}{isCost && row.unknown_price_calls > 0 && <small className="chart-warning">{t('定价 {percent}%', {percent: row.price_coverage_percent?.toFixed(0)})}</small>}</span>
+    <div className="chart-track">{(row.models || []).filter(model => model[metric] > 0).map(model => <span key={model.model || model.key} className="segment model-segment" style={{width: `${model[metric] / max * 100}%`, background: modelColor(model.model || model.key)}} title={`${modelName(model)}\n${isCost ? costText(model) : formatNumber(model[metric])}${isCost ? `\n${t('定价覆盖 {percent}% 调用', {percent: model.price_coverage_percent?.toFixed(1)})}` : ''}${isCost && unknownCostTitle(model, 'api', [model]) ? `\n${unknownCostTitle(model, 'api', [model])}` : ''}`} />)}</div>
+    <span className="chart-value">{isCost ? <CostValue row={row} unknownOnly={row.unknown_price_calls > 0 && !row.priced_calls}/> : formatCompact(row[metric])}{isCost && row.unknown_price_calls > 0 && <small className="chart-warning" title={unknownCostTitle(row)}>{t('定价 {percent}%', {percent: row.price_coverage_percent?.toFixed(0)})}</small>}</span>
   </div>)}</>;
 }
 export function UsageTable({rows = [], project = false}) {
@@ -41,6 +42,6 @@ export function UsageTable({rows = [], project = false}) {
     return Number(missingLeft) - Number(missingRight) || (missingLeft ? 0 : (typeof left === 'string' ? left.localeCompare(right, locale) : left - right) * (sort.direction === 'ascending' ? 1 : -1));
   });
   return <table><thead><tr>{fields.map(([key, label]) => <th key={key} aria-sort={sort?.key === key ? sort.direction : 'none'}><button className="table-sort" aria-label={t('{label}：点击按{direction}排序', {label: t(label), direction: t(sort?.key === key && sort.direction === 'ascending' ? '降序' : '升序')})} onClick={() => setSort({key, direction: sort?.key === key && sort.direction === 'ascending' ? 'descending' : 'ascending'})}>{t(label)} <span className="sort-indicator">{sort?.key === key ? sort.direction === 'ascending' ? '↑' : '↓' : '↕'}</span></button></th>)}</tr></thead>
-    <tbody>{sorted.map(row => <tr key={row.key}>{fields.map(([key]) => <td key={key}>{key === 'key' ? row.label || row.key : key.endsWith('_percent') ? <Coverage value={row[key]} /> : key === 'api_usd_known' ? <>{money(row[key])}{row.unknown_price_calls ? ` + ${t('未知')}` : ''}</> : key === 'fast_surcharge_usd' ? fastSurcharge(row) : formatNumber(row[key])}</td>)}</tr>)}{!rows.length && <tr><td colSpan={fields.length}><EmptyState /></td></tr>}</tbody></table>;
+    <tbody>{sorted.map(row => <tr key={row.key}>{fields.map(([key]) => <td key={key}>{key === 'key' ? row.label || row.key : key.endsWith('_percent') ? <Coverage value={row[key]} /> : key === 'api_usd_known' ? <CostValue row={row}/> : key === 'fast_surcharge_usd' ? <CostValue row={row} kind="fast"/> : formatNumber(row[key])}</td>)}</tr>)}{!rows.length && <tr><td colSpan={fields.length}><EmptyState /></td></tr>}</tbody></table>;
 }
 

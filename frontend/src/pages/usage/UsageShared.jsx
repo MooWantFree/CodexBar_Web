@@ -3,7 +3,7 @@ import {useQuery} from '@tanstack/react-query';
 import {useDashboard} from '../../context/DashboardContext';
 import {apiGet} from '../../lib/api';
 import {t} from '../../lib/i18n';
-import {formatNumber, modelColor, money} from '../../lib/format';
+import {formatNumber, money} from '../../lib/format';
 import {StackedChart} from '../../components/Shared';
 import '../usageMessages';
 
@@ -48,14 +48,6 @@ export function SortableHead({columns, sort, onSort}) {
 
 export function Coverage({value}) {
   return <span className={`coverage ${numeric(value) === 100 ? '' : 'partial'}`}>{fixed(value)}%</span>;
-}
-
-export function SnapshotNotice({inferred}) {
-  const {range} = useDashboard();
-  return range.priceMode !== 'current' && inferred > 0 ? <p className="fine-print unknown"
-    title={t('首次采集回填属于估算，无法确认调用当时的官方价格。')}>
-    {t('快照估算 · {count} 次调用使用首次采集价格回填', {count: formatNumber(inferred)})}
-  </p> : null;
 }
 
 export function useSynchronizedCharts(ref, rows) {

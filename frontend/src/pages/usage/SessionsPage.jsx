@@ -4,9 +4,10 @@ import {useQuery} from '@tanstack/react-query';
 import {useDashboard} from '../../context/DashboardContext';
 import {apiGet} from '../../lib/api';
 import {locale, t} from '../../lib/i18n';
-import {formatNumber, money, formatDateTime, fastSurcharge, modelName} from '../../lib/format';
+import {formatNumber, formatDateTime, modelName} from '../../lib/format';
 import {EmptyState, ErrorNotice, Pager} from '../../components/Shared';
-import {PAGE_SIZE, EMPTY_ROWS, numeric, fixed, priceUnknown, cost, sessionTitle, projectName, sortUsageRows, SortableHead, SnapshotNotice, TrendPair, scrollToDetail, FAST_TITLE} from './UsageShared';
+import {CostValue} from '../../components/CostValue';
+import {PAGE_SIZE, EMPTY_ROWS, numeric, fixed, sessionTitle, projectName, sortUsageRows, SortableHead, TrendPair, scrollToDetail, FAST_TITLE} from './UsageShared';
 
 const sessionModels = row => Array.isArray(row.model_entries) ? row.model_entries.map(modelName) : row.models || [];
 const sessionProjects = row => Array.isArray(row.project_entries) ? row.project_entries.map(projectName) : row.projects || [];
@@ -33,7 +34,7 @@ function SessionRow({row, group, selection, expanded, onExpand, onSelect}) {
         aria-label={t(expanded ? '收起{title}的会话用量' : '展开{title}的会话用量', {title: sessionTitle(row)})} onClick={() => onExpand(row.key)}><span aria-hidden="true">{expanded ? '⌄' : '>'}</span></button> : <span className="session-expand-spacer" aria-hidden="true"/>}
       <div><button type="button" className="session-pick" aria-pressed={selected} data-session={row.key} data-session-scope={scope} onClick={() => onSelect({key: row.key, scope})}>{title}</button><small>{description.filter(Boolean).join(' · ')}</small></div>
     </div></td><td>{sessionModels(row).join(' · ') || '—'}</td><td>{row.last_activity ? formatDateTime(row.last_activity, {hour12: false}) : '—'}</td>
-    <td>{formatNumber(row.calls)}</td><td>{formatNumber(row.total_tokens)}</td><td>{formatNumber(row.fast_calls)}</td><td>{cost(row)}</td><td>{fastSurcharge(row)}</td>
+    <td>{formatNumber(row.calls)}</td><td>{formatNumber(row.total_tokens)}</td><td>{formatNumber(row.fast_calls)}</td><td><CostValue row={row}/></td><td><CostValue row={row} kind="fast"/></td>
   </tr>;
 }
 
@@ -58,16 +59,18 @@ function SessionDetail({selection, detailRef}) {
     queryFn: ({signal}) => apiGet(`/api/sessions/detail?${queryString({session: selection.key, scope: selection.scope, offset: page * PAGE_SIZE, limit: PAGE_SIZE, sort_by: sort.field, sort_direction: sort.direction})}`, {signal})});
   const report = query.data, total = report?.total;
   const pages = Math.max(1, Math.ceil(numeric(report?.request_count) / PAGE_SIZE));
-  const summary = total ? t('{calls} 次调用 · {tokens} Token · API 等价 {cost} · Fast API 加价 {fast} · 价格覆盖 {price}% · 档位覆盖 {tier}%', {
-    calls: formatNumber(total.calls), tokens: formatNumber(total.total_tokens), cost: cost(total), fast: fastSurcharge(total), price: fixed(total.price_coverage_percent), tier: fixed(total.tier_coverage_percent),
-  }) : t(query.isPending && selection ? '正在读取会话调用…' : '选择一个会话查看每次调用。');
+  const summary = total ? <>{t('{calls} 次调用 · {tokens} Token', {calls: formatNumber(total.calls), tokens: formatNumber(total.total_tokens)})}
+    {' · '}{t('API 等价')} <CostValue row={total} models={report.models}/>
+    {' · '}{t('Fast API 加价')} <CostValue row={total} kind="fast" models={report.models}/>
+    {' · '}{t('价格覆盖 {percent}%', {percent: fixed(total.price_coverage_percent)})}
+    {' · '}{t('档位覆盖 {percent}%', {percent: fixed(total.tier_coverage_percent)})}</> : t(query.isPending && selection ? '正在读取会话调用…' : '选择一个会话查看每次调用。');
   return <section id="sessionDetail" className="panel table-panel" ref={detailRef} tabIndex={-1} aria-busy={query.isFetching}>
     <div className="panel-heading"><div><p className="eyebrow">{t('会话明细标题')}</p><h2 id="sessionDetailTitle">{report ? t('{title} · {scope}', {title: sessionTitle(report.session), scope: t(selection.scope === 'tree' && report.session.has_children ? '会话合计' : '自身用量')}) : t('会话明细')}</h2><p id="sessionDetailSummary" className="fine-print">{summary}</p></div></div>
     <ErrorNotice error={query.error}/><TrendPair report={report} nested prefix="session"/>
     <div className="table-wrap request-table-wrap"><table><SortableHead columns={REQUEST_COLUMNS} sort={sort} onSort={next => { setSort(next); setPage(0); }}/><tbody id="requestTable">
-      {total && <tr className="request-total"><td>{t('总计')}</td><td>—</td><td>—</td><td>{formatNumber(total.input_tokens)}</td><td>{formatNumber(total.cached_input_tokens)}</td><td>{formatNumber(total.output_tokens)}</td><td>{cost(total, true)}</td><td>{fastSurcharge(total, true)}</td><td>—</td></tr>}
+      {total && <tr className="request-total"><td>{t('总计')}</td><td>—</td><td>—</td><td>{formatNumber(total.input_tokens)}</td><td>{formatNumber(total.cached_input_tokens)}</td><td>{formatNumber(total.output_tokens)}</td><td><CostValue row={total} models={report.models}/></td><td><CostValue row={total} kind="fast" models={report.models}/></td><td>—</td></tr>}
       {(report?.requests || []).map(row => <tr key={row.key}><td>{formatDateTime(row.timestamp, {hour12: false})}</td><td>{Object.hasOwn(row, 'model_id') ? modelName({key: row.model_id, display_name: row.model}) : row.model}</td><td>{row.service_tier === 'priority' ? 'Fast' : row.service_tier === 'standard' ? 'Standard' : t('未知')}</td>
-        <td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td><td>{priceUnknown(row) ? t('未知') : money(row.api_usd_known, true)}</td><td>{fastSurcharge(row, true)}</td><td><SnapshotBadge snapshot={row.price_snapshot}/></td>
+        <td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td><td><CostValue row={row} unknownOnly/></td><td><CostValue row={row} kind="fast"/></td><td><SnapshotBadge snapshot={row.price_snapshot}/></td>
       </tr>)}{!report?.requests?.length && <tr><td colSpan={9}><EmptyState>{t('暂无调用')}</EmptyState></td></tr>}
     </tbody></table></div><Pager page={page} pages={pages} onPage={setPage} disabled={query.isFetching || !report}/>
   </section>;
@@ -118,7 +121,7 @@ export default function SessionsPage() {
   const toggle = key => setExpanded(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const ranking = {api_usd_known: 'cost', total_tokens: 'tokens', fast_surcharge_usd: 'fast'}[sort.field] || '';
   return <section className="page" data-page="sessions" aria-busy={query.isFetching}>
-    <ErrorNotice error={query.error}/><SnapshotNotice inferred={query.data?.inferred_price_calls}/>
+    <ErrorNotice error={query.error}/>
     <section className="panel table-panel"><div className="panel-heading session-heading"><div><p className="eyebrow">{t('会话排行')}</p><h2>{t('会话用量排行')}</h2>
       <small id="sessionCount" className="fine-print">{t('{count} 个会话 · 父会话汇总自身及所有子会话 · 用量均在当前筛选区间内', {count: formatNumber(rows.length)})}</small></div>
       <div className="session-tools"><label>{t('搜索会话')}<input id="sessionSearch" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t('标题、项目或会话 ID')}/></label>

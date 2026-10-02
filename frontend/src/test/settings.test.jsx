@@ -246,10 +246,13 @@ describe("log directory settings", () => {
     const { requests } = mockSettingsApis();
     const { client } = mount();
     await ready();
+    expect(document.querySelector('.log-directory-chip code').textContent).toBe(originalHome);
     client.setQueryData(["quota-value", "original-account", "snapshot"], { status: "ready", windows: [{ used_percent: 75 }] });
     fireEvent.change(directoryInput(), { target: { value: replacementHome } });
     fireEvent.click(screen.getByRole("button", { name: "Save and scan" }));
     await waitFor(() => expect(document.querySelector("footer code").textContent).toBe(replacementHome));
+    expect(document.querySelector('.log-directory-chip code').textContent).toBe(replacementHome);
+    expect(document.querySelector('.log-directory-chip').title).toBe(replacementHome);
     await waitFor(() => expect(configuration().maximumDate).toBe("2026-10-03"));
     const save = requests.find(request => request.path === "/api/settings" && request.method === "PUT");
     expect(save.body).toEqual({ codex_home: replacementHome });

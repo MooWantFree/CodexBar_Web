@@ -78,6 +78,20 @@ describe('message catalogs', () => {
 });
 
 describe('localized formatting', () => {
+  it.each([
+    ['en-US', 'unknown for 2 calls', 'Fast multiplier', '2 Fast calls'],
+    ['zh-TW', '有 2 次调用', 'Fast 倍率', '2 次 Fast 调用'],
+    ['ja-JP', '2 回の呼び出し', 'Fast 倍率', '2 回の Fast 呼び出し'],
+  ])('localizes the unknown amount explanation in %s', async (language, calls, reason, fastCalls) => {
+    await loadI18n([language]);
+    const {unknownCostTitle} = await import('../components/CostValue');
+    const row = {api_usd_known: 0, unknown_price_calls: 2, fast_surcharge_usd: 0, unknown_fast_price_calls: 2};
+    expect(unknownCostTitle(row)).toContain(calls);
+    expect(unknownCostTitle(row)).toContain(reason);
+    expect(unknownCostTitle(row, 'fast')).toContain(fastCalls);
+    expect(unknownCostTitle({api_usd_known: 0, unknown_price_calls: 0})).toBeUndefined();
+  });
+
   it.each(['en-US', 'zh-TW', 'ja-JP'])('rounds dollar amounts to at most two decimals with only the dollar symbol in %s', async language => {
     await loadI18n([language]);
     const {money, fastSurcharge} = await import('../lib/format');

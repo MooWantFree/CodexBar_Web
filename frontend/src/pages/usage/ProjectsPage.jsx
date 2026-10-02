@@ -3,9 +3,10 @@ import {useQuery} from '@tanstack/react-query';
 import {useDashboard} from '../../context/DashboardContext';
 import {apiGet} from '../../lib/api';
 import {t} from '../../lib/i18n';
-import {formatNumber, formatCompact, money, fastSurcharge, modelColor, modelName} from '../../lib/format';
+import {formatNumber, formatCompact, modelColor, modelName} from '../../lib/format';
 import {EmptyState, ErrorNotice, UsageTable} from '../../components/Shared';
-import {EMPTY_ROWS, numeric, fixed, cost, priceUnknown, projectName, sortUsageRows, SortableHead, Coverage, SnapshotNotice, TrendPair, useSynchronizedCharts, scrollToDetail, FAST_TITLE} from './UsageShared';
+import {CostValue, costText, unknownCostTitle} from '../../components/CostValue';
+import {EMPTY_ROWS, numeric, fixed, priceUnknown, projectName, sortUsageRows, SortableHead, Coverage, TrendPair, useSynchronizedCharts, scrollToDetail, FAST_TITLE} from './UsageShared';
 
 function ProjectChart({rows, metric, selected, onSelect}) {
   const max = Math.max(...rows.map(row => numeric(row[metric])), Number.EPSILON);
@@ -17,9 +18,9 @@ function ProjectChart({rows, metric, selected, onSelect}) {
       onClick={() => onSelect(row.key)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(row.key); } }}>
       <span className="project-label">{projectName(row)}</span><div className="chart-track">{(row.models || []).filter(model => model[metric]).map(model => <span key={model.model || model.key} className="segment model-segment"
         style={{width: `${model[metric] / max * 100}%`, background: modelColor(model.model || model.key)}}
-        title={`${modelName(model)}\n${isCost ? money(model[metric], true) : `${formatNumber(model[metric])} Token`}${isCost ? `\n${t('定价覆盖 {percent}% 调用', {percent: fixed(model.price_coverage_percent)})}` : ''}`}/>)}</div>
-      <span className="chart-value">{isCost ? priceUnknown(row) && !row.priced_calls ? t('未知') : money(row.api_usd_known, true) : formatCompact(row.total_tokens)}
-        {isCost && priceUnknown(row) && <small className="chart-warning">{t('定价 {percent}%', {percent: fixed(row.price_coverage_percent, 0)})}</small>}</span>
+        title={`${modelName(model)}\n${isCost ? costText(model) : `${formatNumber(model[metric])} Token`}${isCost ? `\n${t('定价覆盖 {percent}% 调用', {percent: fixed(model.price_coverage_percent)})}` : ''}${isCost && unknownCostTitle(model, 'api', [model]) ? `\n${unknownCostTitle(model, 'api', [model])}` : ''}`}/>)}</div>
+      <span className="chart-value">{isCost ? <CostValue row={row} unknownOnly={priceUnknown(row) && !row.priced_calls}/> : formatCompact(row.total_tokens)}
+        {isCost && priceUnknown(row) && <small className="chart-warning" title={unknownCostTitle(row)}>{t('定价 {percent}%', {percent: fixed(row.price_coverage_percent, 0)})}</small>}</span>
     </div>) : <EmptyState>{t('这个日期范围还没有项目数据。')}</EmptyState>}
   </div>;
 }
@@ -41,7 +42,7 @@ export default function ProjectsPage() {
   useSynchronizedCharts(chartsRef, rows);
   const select = key => { setSelected(key); scrollToDetail(detailRef); };
   return <section className="page" data-page="projects" aria-busy={query.isFetching}>
-    <ErrorNotice error={query.error}/><SnapshotNotice inferred={rows.reduce((sum, row) => sum + numeric(row.inferred_price_calls), 0)}/>
+    <ErrorNotice error={query.error}/>
     <section className="charts-grid project-summary-charts" ref={chartsRef}>
       {['total_tokens', 'api_usd_known'].map((metric, index) => <article key={metric} className="panel chart-panel"><div className="panel-heading"><div>
         <p className="eyebrow">{t(index ? '项目成本' : '项目总量')}</p><h2>{t(index ? '项目 API 等价成本' : '项目总使用量')}</h2>
@@ -51,7 +52,7 @@ export default function ProjectsPage() {
       <SortableHead columns={PROJECT_COLUMNS} sort={sort} onSort={setSort}/><tbody id="projectTable">{sorted.map(row => <tr key={row.key} className={row.key === selectedKey ? 'selected' : ''} onClick={() => select(row.key)}>
         <td className="project-name"><button type="button" className="session-pick" aria-pressed={row.key === selectedKey}>{projectName(row)}</button><small title={row.path || ''}>{row.path || t('无法识别项目路径')}</small></td>
         <td>{formatNumber(row.calls)}</td><td>{formatNumber(row.fast_calls)}</td><td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td>
-        <td>{formatNumber(row.total_tokens)}</td><td>{cost(row)}</td><td>{fastSurcharge(row)}</td><td><Coverage value={row.price_coverage_percent}/></td>
+        <td>{formatNumber(row.total_tokens)}</td><td><CostValue row={row}/></td><td><CostValue row={row} kind="fast"/></td><td><Coverage value={row.price_coverage_percent}/></td>
       </tr>)}{!rows.length && <tr><td colSpan={10}><EmptyState>{t('暂无数据')}</EmptyState></td></tr>}</tbody>
     </table></div></section>
     <section id="projectDetail" className="panel project-detail-panel" tabIndex={-1} ref={detailRef} aria-busy={detail.isFetching}>
