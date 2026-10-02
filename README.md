@@ -68,9 +68,25 @@ uv run codex-token-report
 export CODEX_TOKEN_REPORT_CODEX_BIN="/path/to/codex"
 ```
 
-> 更新代码后, 需要关闭旧服务并重新运行 `uv run codex-token-report`, 再刷新页面. 
-> 后端不会自动重载; 若页面与运行中的后端版本不匹配, 统计区会明确提示重启. 
->
+### 更新与重启
+
+仓库已包含前端构建产物, 正常启动不需要 Node.js. 如果更新或修改了 `frontend/` 中的前端源码,
+需要安装 Node.js 20 或更新版本, 并在仓库根目录重新安装前端依赖、编译前端（Windows / macOS / Linux 均适用）:
+
+```powershell
+npm --prefix frontend ci
+npm --prefix frontend run build
+```
+
+构建产物会更新到 `src/codex_token_report/static/webui/`. 更新代码后, 关闭旧服务,
+在仓库根目录重新启动, 然后刷新浏览器页面:
+
+```powershell
+uv run codex-token-report
+```
+
+后端不会自动重载; 若页面与运行中的后端版本不匹配, 统计区会明确提示重启.
+
 > 首次启动扫描所选 Codex 目录中的 `sessions`、`archived_sessions` 和 `logs_2.sqlite`. 
 > 默认读取环境变量 `CODEX_HOME`, 未设置时使用当前用户主目录下的 `.codex`: Windows
 > 为 `$env:USERPROFILE\.codex`, macOS / Linux 为 `~/.codex`. 通过 `--codex-home` 可以覆盖. 
