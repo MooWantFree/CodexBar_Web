@@ -24,7 +24,7 @@ describe('unknown OpenAI Fast rates', () => {
       fast_standard_fallback_calls: 1, fast_surcharge_usd: 0, unknown_fast_price_calls: 1};
     const {container} = render(<><CostValue row={row}/><CostValue row={row} kind="fast"/></>);
     const [amount, surcharge] = container.querySelectorAll('.cost-value');
-    expect(amount.textContent).toBe('$0');
+    expect(amount.textContent).toBe('$0.00');
     expect(amount.title).toContain('Standard rates');
     expect(surcharge.textContent).toBe('Unknown');
     expect(surcharge.classList.contains('unknown-cost')).toBe(true);
@@ -35,7 +35,7 @@ describe('unknown OpenAI Fast rates', () => {
     const {container} = render(<CostValue row={{api_usd_known: 5, unknown_price_calls: 1,
       api_standard_fallback: true}}/>);
     const amount = container.querySelector('.cost-value');
-    expect(amount.textContent).toBe('$5');
+    expect(amount.textContent).toBe('$5.00');
     expect(amount.title).toContain('Standard');
     expect(amount.title).not.toContain('temporarily estimated');
   });

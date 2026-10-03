@@ -92,14 +92,15 @@ describe('localized formatting', () => {
     expect(unknownCostTitle({api_usd_known: 0, unknown_price_calls: 0})).toBeUndefined();
   });
 
-  it.each(['en-US', 'zh-TW', 'ja-JP'])('rounds dollar amounts to at most two decimals with only the dollar symbol in %s', async language => {
+  it.each(['en-US', 'zh-TW', 'ja-JP'])('rounds dollar amounts to exactly two decimals with only the dollar symbol in %s', async language => {
     await loadI18n([language]);
     const {money, fastSurcharge} = await import('../lib/format');
-    expect(money(8)).toBe('$8');
-    expect(money(8.5)).toBe('$8.5');
+    expect(money(8)).toBe('$8.00');
+    expect(money(8.5)).toBe('$8.50');
     expect(money(1234.567)).toBe('$1,234.57');
+    expect(money(1456.99657828)).toBe('$1,457.00');
     expect(money(1.005)).toBe('$1.01');
-    expect(money(0.004)).toBe('$0');
+    expect(money(0.004)).toBe('$0.00');
     expect(money(0.005)).toBe('$0.01');
     expect(money(-1.235)).toBe('-$1.24');
     expect(money(8.555, true)).toBe('$8.56');
@@ -232,7 +233,7 @@ describe('language preferences', () => {
     expect(document.documentElement.lang).toBe('ja');
     expect(store.t('模型定价')).toBe('モデル料金');
     expect(formatCompact(10000)).toBe('1万');
-    expect(money(10)).toBe('$10');
+    expect(money(10)).toBe('$10.00');
     expect(formatDateTime('2026-10-01T17:03:00Z', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})).toBe('2026/10/02 01:03');
     store.setLanguagePreference('auto');
     expect(store.locale).toBe('en');

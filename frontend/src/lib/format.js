@@ -10,7 +10,7 @@ function formatters() {
   if (!formatterCache.has(locale)) formatterCache.set(locale, {
     number: new Intl.NumberFormat(locale),
     compact: new Intl.NumberFormat(locale, {notation: 'compact', maximumFractionDigits: 2}),
-    currency: new Intl.NumberFormat(locale, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 0, maximumFractionDigits: 2}),
+    currency: new Intl.NumberFormat(locale, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2}),
   });
   return formatterCache.get(locale);
 }
