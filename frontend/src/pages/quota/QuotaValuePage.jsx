@@ -146,7 +146,7 @@ export function QuotaValuePage() {
         const isCurrent = quota?.status === "ready" && cycle.is_current;
         return <tr key={cycle.id} className={selected ? "selected" : undefined}>
           <td><strong>{quotaWindowLabel(cycle)}</strong><small>{planLabel(cycle)} <span className={`coverage${isCurrent ? "" : " partial"}`}>{t(isCurrent ? "Current cycle" : "Historical cycle")}</span></small></td>
-          <td>{valueTime(cycle.cycle_start_at)}<small>{t(cycle.cycle_start_at ? cycle.cycle_start_estimated ? "Estimated start" : "Confirmed start" : "Unknown start")} · {t("Scheduled reset at that reading")} {valueTime(cycle.resets_at)}</small></td>
+          <td>{valueTime(cycle.cycle_start_at)}</td>
           <td className="quota-value-primary">{percent(cycle.used_percent)}</td><td className="quota-value-primary">{valueMoney(cycle.total?.api_usd_known)}{cycle.total?.unknown_price_calls > 0 && <small className="unknown">{t("Known amounts only")}</small>}</td><td>{valueTime(cycle.fetched_at)}</td><td>{valueMoney(cycle.usd_per_percent)}</td><td>{valueMoney(cycle.full_quota_usd)}</td><td>{formatNumber(cycle.observation_count)}</td>
           <td><button type="button" className="button ghost" disabled={busy || history.isFetching} aria-controls="quotaValueHistoryDetail" aria-expanded={selected} onClick={event => { detailTrigger.current = event.currentTarget; setSelection(selected ? null : { identity: historyIdentity, id: cycle.id }); }}>{t(selected ? "Hide details" : "View readings")}</button></td>
         </tr>;
