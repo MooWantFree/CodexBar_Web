@@ -59,7 +59,7 @@ export function QuotaValuePage() {
     return report;
   } });
   const history = useQuery({ queryKey: ["quota-value-history", scope, mode, version, page], enabled, queryFn: async ({ signal }) => {
-    const report = await apiGet(`/api/quota/value/history?${new URLSearchParams({ price_mode: mode, offset: page * 20, limit: 20 })}`, { signal });
+    const report = await apiGet(`/api/quota/value/history?${new URLSearchParams({ price_mode: mode, offset: page * 20, limit: 20, include_current: false })}`, { signal });
     if (!report || !Array.isArray(report.cycles)) throw compatibilityError();
     return report;
   } });
@@ -91,7 +91,7 @@ export function QuotaValuePage() {
   if (quota?.archive_status === "error" || report?.archive_status === "error") status += ` · ${t("Raw quota readings could not be saved; amounts remain available.")}`;
   if (quota?.value_history_status === "error" || report?.value_history_status === "error") status += ` · ${t("Quota value history could not be saved; current amounts remain available.")}`;
   const displayedPage = historyReport?.status === "ready" ? Math.floor(historyReport.offset / 20) : page;
-  const cycles = historyReport?.status === "ready" ? historyReport.cycles : [];
+  const cycles = historyReport?.status === "ready" ? historyReport.cycles.filter(cycle => !cycle.is_current) : [];
   let historyStatus = historyReport?.status === "ready" ? t("{context} · {count} saved cycles · {basis} · Historical amounts remain as read", { context: historyContext({ ...quota, ...historyReport, status: quota?.status }), count: formatNumber(historyReport.total), basis: t(mode === "current" ? "Current-price conversion at that reading" : "Saved-price conversion at that reading") })
     : systemMessage(historyReport?.message) || t("Reading saved account history…");
   if (history.isError && historyReport) historyStatus += ` · ${history.error.message} · ${t("Displayed records retain values from the previous successful read.")}`;

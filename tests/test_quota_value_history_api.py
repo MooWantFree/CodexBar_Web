@@ -74,6 +74,9 @@ def test_refresh_records_previous_cycle_percentage_and_spent_amount(history_app)
     assert client.get("/api/quota/value/history").json()["cycles"] == []
     first = client.get("/api/quota").json()
     assert first["value_history_status"] == "recording"
+    only_current = client.get("/api/quota/value/history?include_current=false").json()
+    assert only_current["status"] == "ready" and only_current["cycles"] == []
+    assert only_current["total"] == 0 and not only_current["has_more"]
     state["now"] = datetime.fromisoformat("2026-09-20T13:00:00+00:00")
     state["reading"] = reading(used=50)
     assert client.post("/api/quota/refresh").status_code == 200
@@ -95,6 +98,12 @@ def test_refresh_records_previous_cycle_percentage_and_spent_amount(history_app)
     assert [row["total"]["api_usd_known"] for row in details["observations"]] == [0.008, 0.004]
     assert state["calls"] == 3  # History and details do not refresh quota.
     assert "account-a" not in json.dumps(report)
+
+    filtered = client.get("/api/quota/value/history?include_current=false&limit=1").json()
+    assert filtered["cycles"] == [previous]
+    assert filtered["total"] == 1 and not filtered["has_more"]
+    next_page = client.get("/api/quota/value/history?include_current=false&offset=1&limit=1").json()
+    assert next_page["cycles"] == [] and next_page["total"] == 1 and not next_page["has_more"]
 
     page = client.get("/api/quota/value/history?limit=1").json()
     assert page["total"] == 2 and page["has_more"]
@@ -135,6 +144,7 @@ def test_failed_reads_use_labelled_archive_and_account_changes_isolate_history(h
     assert offline["cycles"][0]["id"] == first_id
     assert not offline["cycles"][0]["is_current"]
     assert offline["cycles"][0]["observation_count"] == 1
+    assert client.get("/api/quota/value/history?include_current=false").json() == offline
     assert client.get(f"/api/quota/value/history/{first_id}").status_code == 200
     state["error"] = False
     state["reading"] = reading(identity="account-b")

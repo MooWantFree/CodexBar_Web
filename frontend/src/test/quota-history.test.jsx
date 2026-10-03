@@ -12,8 +12,9 @@ const cycle = {
   used_percent: 25, remaining_percent: 75, fetched_at: savedAt, cycle_start_at: resetAt,
   resets_at: "2026-10-01T07:00:00+00:00", total: { api_usd_known: 8, calls: 3, total_tokens: 100 },
   usd_per_percent: 0.32, full_quota_usd: 32, remaining_quota_usd: 24,
-  observation_count: 2, is_current: true, price_mode: "snapshot",
+  observation_count: 2, is_current: false, price_mode: "snapshot",
 };
+const currentCycle = { ...cycle, id: 2, is_current: true };
 const offlineQuota = {
   status: "error", message: "读取额度失败，请检查 Codex CLI 后重试。", windows: [{ remaining_percent: 75 }],
   history_mode: "offline", history_label: "上次保存的账号", history_fetched_at: savedAt,
@@ -47,6 +48,28 @@ beforeEach(() => {
 });
 
 describe("quota saved history", () => {
+  it("requests historical cycles and hides current rows while keeping current conversion cards", async () => {
+    const historical = { ...cycle, total: { ...cycle.total, api_usd_known: 4 } };
+    mockQuotaApis({
+      history: historyResponse([currentCycle, historical]),
+      value: { status: "ready", fetched_at: savedAt, price_mode: "snapshot", windows: [currentCycle] },
+    });
+    mount(<QuotaValuePage />, liveQuota);
+    await screen.findByText("View readings");
+    const historyRequest = globalThis.fetch.mock.calls.find(([path]) => path.startsWith("/api/quota/value/history?"))[0];
+    const params = new URLSearchParams(historyRequest.split("?")[1]);
+    expect(params.get("include_current")).toBe("false");
+    expect(params.get("price_mode")).toBe("snapshot");
+    expect(params.get("offset")).toBe("0");
+    expect(params.get("limit")).toBe("20");
+    expect(document.querySelectorAll("#quotaValueHistoryTable tr")).toHaveLength(1);
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("$4");
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("$8");
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("Current cycle");
+    expect(document.querySelector("#quotaValueTitle").textContent).toBe("Current cycle conversion");
+    expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8");
+  });
+
   it("hides stale live percentages while showing immutable offline amounts and cycle details", async () => {
     mockQuotaApis();
     mount(<><QuotaSidebar /><QuotaValuePage /></>);

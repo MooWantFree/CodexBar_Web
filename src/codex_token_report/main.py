@@ -723,10 +723,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def quota_value_history(
         price_mode: Literal["current", "snapshot"] = Query(default="snapshot"),
         offset: int = Query(default=0, ge=0), limit: int = Query(default=20, ge=1, le=100),
+        include_current: bool = Query(default=True),
     ) -> dict:
         try:
             return await quota_operation(
                 "value_records", price_mode=price_mode, offset=offset, limit=limit,
+                include_current=include_current,
             )
         except (sqlite3.Error, OSError, ValueError, TypeError) as exc:
             raise HTTPException(status_code=503, detail="额度历史读取失败，请稍后重试。") from exc

@@ -170,6 +170,7 @@ class QuotaValueHistory:
     def records(
         self, account_key: str, *, price_mode: str = "snapshot",
         offset: int = 0, limit: int = 20, current_quota: dict | None = None,
+        include_current: bool = True,
     ) -> dict:
         self._mode(price_mode)
         if (not isinstance(offset, int) or isinstance(offset, bool) or offset < 0
@@ -181,13 +182,19 @@ class QuotaValueHistory:
         if key is None:
             return result
         with self.database.connect() as connection:
+            current = self._current_ids(connection, key, current_quota)
+            excluded = tuple(sorted(current)) if not include_current else ()
+            exclude_sql = (
+                f" AND c.id NOT IN ({','.join('?' for _ in excluded)})" if excluded else ""
+            )
             total = connection.execute(
-                """SELECT COUNT(DISTINCT c.id) FROM quota_value_cycles c
+                f"""SELECT COUNT(DISTINCT c.id) FROM quota_value_cycles c
                 JOIN quota_value_observations o ON o.cycle_id = c.id AND o.account_key = c.account_key
-                WHERE c.account_key = ? AND o.price_mode = ?""", (key, price_mode),
+                WHERE c.account_key = ? AND o.price_mode = ?{exclude_sql}""",
+                (key, price_mode, *excluded),
             ).fetchone()[0]
             rows = connection.execute(
-                """SELECT c.id AS cycle_id, o.payload_json,
+                f"""SELECT c.id AS cycle_id, o.payload_json,
                     (SELECT COUNT(*) FROM quota_value_observations n
                      WHERE n.cycle_id = c.id AND n.account_key = c.account_key
                        AND n.price_mode = ?) AS observation_count
@@ -195,10 +202,10 @@ class QuotaValueHistory:
                     SELECT n.id FROM quota_value_observations n
                     WHERE n.cycle_id = c.id AND n.account_key = c.account_key AND n.price_mode = ?
                     ORDER BY n.fetched_at DESC, n.id DESC LIMIT 1
-                ) WHERE c.account_key = ? ORDER BY o.fetched_at DESC, c.id DESC LIMIT ? OFFSET ?""",
-                (price_mode, price_mode, key, limit, offset),
+                ) WHERE c.account_key = ?{exclude_sql}
+                ORDER BY o.fetched_at DESC, c.id DESC LIMIT ? OFFSET ?""",
+                (price_mode, price_mode, key, *excluded, limit, offset),
             ).fetchall()
-            current = self._current_ids(connection, key, current_quota)
         result.update(cycles=[self._public(row, current) for row in rows], total=total,
                       has_more=offset + len(rows) < total)
         return result

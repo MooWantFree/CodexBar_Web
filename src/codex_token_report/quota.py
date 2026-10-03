@@ -457,6 +457,7 @@ class QuotaService:
 
     def value_records(
         self, *, price_mode: str = "snapshot", offset: int = 0, limit: int = 20,
+        include_current: bool = True,
     ) -> dict:
         """Read verified account history or explicitly labelled local archives, without RPC."""
         with self.lock:
@@ -471,7 +472,7 @@ class QuotaService:
                 }
             return {**self.value_history.records(
                 self._history_account_key, price_mode=price_mode, offset=offset, limit=limit,
-                current_quota=self.cached,
+                current_quota=self.cached, include_current=include_current,
             ), **self._history_context()}
 
     def value_observations(self, cycle_id: int, *, price_mode: str = "snapshot") -> dict | None:

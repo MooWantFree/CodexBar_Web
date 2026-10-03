@@ -279,6 +279,33 @@ def test_cycle_pagination_sorts_by_snapshot_time_instead_of_insert_order(store):
     assert history.records(ALICE, offset=10)["cycles"] == []
 
 
+@pytest.mark.parametrize("price_mode", ["snapshot", "current"])
+def test_excluding_current_windows_filters_total_and_pages_before_pagination(store, price_mode):
+    _, _, history = store
+    for day in (22, 20, 21):
+        reading = quota(
+            f"2026-09-{day}T12:00:00+00:00", f"2026-09-{day}T15:00:00+00:00",
+        )
+        reading["windows"].append({**reading["windows"][0], "slot": "secondary"})
+        history.observe(ALICE, reading)
+    current = quota("2026-09-22T12:00:00+00:00", "2026-09-22T15:00:00+00:00")
+    current["windows"].append({**current["windows"][0], "slot": "secondary"})
+    all_cycles = history.records(ALICE, price_mode=price_mode, current_quota=current)
+    expected = [row for row in all_cycles["cycles"] if not row["is_current"]]
+    assert all_cycles["total"] == 6 and len(expected) == 4
+
+    first = history.records(ALICE, price_mode=price_mode, current_quota=current,
+                            include_current=False, limit=3)
+    assert first["total"] == 4 and first["has_more"]
+    assert first["cycles"] == expected[:3]
+    second = history.records(ALICE, price_mode=price_mode, current_quota=current,
+                             include_current=False, offset=3, limit=3)
+    assert second["total"] == 4 and not second["has_more"]
+    assert second["cycles"] == expected[3:]
+    assert history.records(ALICE, price_mode=price_mode, current_quota=current,
+                           include_current=False, offset=4)["cycles"] == []
+
+
 def test_zero_percent_rolling_timer_creates_no_false_history_or_current_badge(store):
     _, _, history = store
     history.observe(ALICE, quota())
@@ -319,6 +346,19 @@ def test_multiple_windows_in_one_read_keep_separate_cycles(store):
     assert result["total"] == 2
     assert {row["slot"] for row in result["cycles"]} == {"primary", "secondary"}
     assert all(row["is_current"] and row["observation_count"] == 1 for row in result["cycles"])
+    filtered = history.records(ALICE, current_quota=reading, include_current=False)
+    assert filtered["status"] == "ready" and filtered["cycles"] == []
+    assert filtered["total"] == 0 and not filtered["has_more"]
+    assert history.records(ALICE, include_current=False)["cycles"] == []
+
+
+def test_unavailable_current_quota_keeps_saved_cycles_when_current_is_excluded(store):
+    _, _, history = store
+    history.observe(ALICE, quota())
+    offline = quota(status="unavailable")
+    expected = history.records(ALICE, current_quota=offline)
+    assert expected["total"] == 1 and not expected["cycles"][0]["is_current"]
+    assert history.records(ALICE, current_quota=offline, include_current=False) == expected
 
 
 def test_history_reads_do_not_call_pricing_scan_or_report_builder(store, monkeypatch):
