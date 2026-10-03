@@ -295,6 +295,16 @@ class Database:
             and row["size_bytes"] == size_bytes
         )
 
+    def file_fingerprints(self) -> dict[str, tuple[int, int]]:
+        """Load scan checkpoints once instead of opening a connection per file."""
+        with self.connect() as connection:
+            return {
+                str(row["source_file"]): (int(row["mtime_ns"]), int(row["size_bytes"]))
+                for row in connection.execute(
+                    "SELECT source_file, mtime_ns, size_bytes FROM file_state"
+                )
+            }
+
     def get_file_state(self, source_file: str) -> dict[str, Any] | None:
         with self.connect() as connection:
             row = connection.execute(
@@ -350,6 +360,18 @@ class Database:
         return [{**defaults, **event} for event in events]
 
     @staticmethod
+    def _remove_missing_file_states(connection: sqlite3.Connection, alias_paths: list[str]) -> None:
+        missing = []
+        for path in alias_paths:
+            try:
+                if not Path(path).exists():
+                    missing.append((path,))
+            except OSError:
+                # An unreadable source may return; keep its parser state.
+                continue
+        connection.executemany("DELETE FROM file_state WHERE source_file = ?", missing)
+
+    @staticmethod
     def _merge_session_aliases(
         connection: sqlite3.Connection, *, session_id: str | None, source_file: str
     ) -> None:
@@ -368,10 +390,9 @@ class Database:
             AND (session_id = ? OR session_id IS NULL)""",
             [(source_file, path, session_id) for path in alias_paths],
         )
-        connection.executemany(
-            "DELETE FROM file_state WHERE source_file = ?",
-            [(path,) for path in alias_paths],
-        )
+        # Multiple physical rollouts can share one session. Keep their offsets
+        # independently so each scan does not invalidate the other live files.
+        Database._remove_missing_file_states(connection, alias_paths)
 
     @staticmethod
     def _merge_filename_aliases(
@@ -399,9 +420,7 @@ class Database:
             "UPDATE usage_events SET source_file = ? WHERE source_file = ?",
             [(source_file, path) for path in aliases],
         )
-        connection.executemany(
-            "DELETE FROM file_state WHERE source_file = ?", [(path,) for path in aliases]
-        )
+        Database._remove_missing_file_states(connection, aliases)
 
     @staticmethod
     def _merge_event_aliases(
@@ -421,25 +440,29 @@ class Database:
             ).fetchone()
             if existing is None:
                 matches = connection.execute(
+                    # Keep the response and fallback lookups separate so a NULL
+                    # turn_id cannot make SQLite scan every legacy fallback row.
                     """
                     SELECT * FROM usage_events
-                    WHERE (session_id = :session_id OR session_id IS NULL)
-                      AND (
-                        (:response_id IS NOT NULL AND response_id = :response_id)
-                        OR (
-                          response_id IS NULL
-                          AND :ordinal IS NOT NULL AND ordinal IS NOT NULL
-                          AND (session_id = :session_id OR source_file = :source_file)
-                          AND timestamp_utc = :timestamp_utc
-                          AND turn_id IS :turn_id
-                          AND (source_kind = :source_kind OR
-                               source_kind = 'token_count_fallback')
-                          AND input_tokens = :input_tokens
-                          AND output_tokens = :output_tokens
-                          AND total_tokens = :total_tokens
-                          AND (:model IS NULL OR model IS NULL OR model = :model)
-                        )
-                      )
+                    INDEXED BY idx_usage_response_id
+                    WHERE response_id = :response_id
+                      AND (session_id = :session_id OR session_id IS NULL)
+                    UNION ALL
+                    SELECT * FROM usage_events
+                    INDEXED BY idx_usage_fallback_identity
+                    WHERE response_id IS NULL
+                      AND (session_id = :session_id OR session_id IS NULL)
+                      AND :ordinal IS NOT NULL AND ordinal IS NOT NULL
+                      AND (session_id = :session_id OR source_file = :source_file)
+                      AND timestamp_utc = :timestamp_utc
+                      AND turn_id IS :turn_id
+                      AND (source_kind = :source_kind OR
+                           source_kind = 'token_count_fallback')
+                      AND input_tokens = :input_tokens
+                      AND output_tokens = :output_tokens
+                      AND total_tokens = :total_tokens
+                      AND (:model IS NULL OR model IS NULL OR model = :model)
+                    LIMIT 2
                     """,
                     parameters,
                 ).fetchall()

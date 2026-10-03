@@ -472,6 +472,60 @@ def _usage_row(response_id: str, ordinal: int) -> dict:
 
 
 @pytest.mark.parametrize(
+    ("copy_count", "same_filename"),
+    [(2, False), (3, False), (2, True)],
+    ids=["two-session-files", "three-session-files", "session-and-archive-copies"],
+)
+def test_scanner_keeps_cache_for_existing_session_copies(
+    tmp_path: Path, copy_count: int, same_filename: bool
+) -> None:
+    scanner, database, initial = _metadata_scanner(
+        tmp_path, {"id": "shared-session"}, usage=True,
+    )
+    rollout = initial.with_name("rollout-shared-session.jsonl")
+    initial.replace(rollout)
+    paths = [rollout]
+    for index in range(1, copy_count):
+        if same_filename:
+            directory = scanner.codex_home / "archived_sessions"
+            directory.mkdir()
+            copy = directory / rollout.name
+        else:
+            copy = rollout.with_name(f"rollout-{index}-shared-session.jsonl")
+        copy.write_bytes(rollout.read_bytes())
+        paths.append(copy)
+
+    first = scanner.scan()
+    assert first.scanned_files == copy_count
+    assert len(database.fetch_events()) == 1
+    for path in paths:
+        stat = path.stat()
+        assert database.file_is_current(str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+
+    second = scanner.scan()
+    assert second.scanned_files == 0
+    assert second.unchanged_files == copy_count
+    assert second.stored_events == 0
+
+    with rollout.open("a", encoding="utf-8") as stream:
+        stream.write(_line(_usage_row("response-2", 2)) + "\n")
+    appended = scanner.scan()
+    assert appended.scanned_files == 1
+    assert appended.incremental_files == 1
+    assert appended.unchanged_files == copy_count - 1
+    assert appended.stored_events == 1
+    events = database.fetch_events()
+    assert {event["response_id"] for event in events} == {"response-1", "response-2"}
+    assert sum(event["total_tokens"] for event in events) == 220
+    with database.connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM file_state").fetchone()[0] == copy_count
+
+    final = scanner.scan()
+    assert final.scanned_files == 0
+    assert final.unchanged_files == copy_count
+
+
+@pytest.mark.parametrize(
     ("metadata", "parent", "is_subagent"),
     [
         (

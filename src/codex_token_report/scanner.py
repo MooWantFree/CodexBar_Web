@@ -536,6 +536,7 @@ class SessionScanner:
         with self._lock:
             started = datetime.now(UTC)
             files, missing = self._session_files()
+            fingerprints = self.database.file_fingerprints()
             scanned = 0
             unchanged = 0
             incremental_files = 0
@@ -550,7 +551,7 @@ class SessionScanner:
                     parse_errors += 1
                     continue
                 source_file = str(path.resolve())
-                if self.database.file_is_current(source_file, stat.st_mtime_ns, stat.st_size):
+                if fingerprints.get(source_file) == (stat.st_mtime_ns, stat.st_size):
                     unchanged += 1
                     continue
 
