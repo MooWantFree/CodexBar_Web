@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .pricing import PriceCatalog
+from .pricing import PriceCatalog, PriceResult
 
 
 def _empty_bucket(key: str) -> dict[str, Any]:
@@ -42,8 +42,8 @@ def _empty_bucket(key: str) -> dict[str, Any]:
 
 def _add_event(
     bucket: dict[str, Any], event: dict[str, Any], catalog: PriceCatalog,
-    *, fast_standard_fallback: bool = True,
-) -> None:
+    *, fast_standard_fallback: bool = True, result: PriceResult | None = None,
+) -> PriceResult:
     input_tokens = int(event["input_tokens"])
     cached = int(event["cached_input_tokens"])
     cache_write = int(event["cache_write_input_tokens"])
@@ -51,14 +51,15 @@ def _add_event(
     service_tier = str(event.get("service_tier") or "unknown")
     event_catalog = event.get("_price_catalog", catalog)
     pricing_model = event.get("pricing_model") or event.get("model")
-    result = event_catalog.calculate(
-        model=pricing_model,
-        input_tokens=input_tokens,
-        cached_input_tokens=cached,
-        cache_write_input_tokens=cache_write,
-        output_tokens=output,
-        service_tier=service_tier,
-    )
+    if result is None:
+        result = event_catalog.calculate(
+            model=pricing_model,
+            input_tokens=input_tokens,
+            cached_input_tokens=cached,
+            cache_write_input_tokens=cache_write,
+            output_tokens=output,
+            service_tier=service_tier,
+        )
     service_tier = result.service_tier
     bucket["calls"] += 1
     bucket["inferred_price_calls"] += int(event.get("price_snapshot", {}).get("inferred", False))
@@ -106,6 +107,7 @@ def _add_event(
         bucket["credit_priced_calls"] += 1
         bucket["credits_known"] += result.codex_credits
         bucket["standard_credits_known"] += result.standard_codex_credits or Decimal(0)
+    return result
 
 
 def _serialize_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
@@ -160,11 +162,14 @@ def build_report(
             daily_models[date_key][model_key]["display_name"] = catalog.display_name(
                 event.get("model")
             )
-        _add_event(total, event, catalog, fast_standard_fallback=fast_standard_fallback)
-        _add_event(daily[date_key], event, catalog, fast_standard_fallback=fast_standard_fallback)
-        _add_event(models[model_key], event, catalog, fast_standard_fallback=fast_standard_fallback)
+        # A request has one price; reuse it across every grouping in this report.
+        result = _add_event(total, event, catalog, fast_standard_fallback=fast_standard_fallback)
+        _add_event(daily[date_key], event, catalog,
+                   fast_standard_fallback=fast_standard_fallback, result=result)
+        _add_event(models[model_key], event, catalog,
+                   fast_standard_fallback=fast_standard_fallback, result=result)
         _add_event(daily_models[date_key][model_key], event, catalog,
-                   fast_standard_fallback=fast_standard_fallback)
+                   fast_standard_fallback=fast_standard_fallback, result=result)
         if event.get("timestamp_utc"):
             stamp = datetime.fromisoformat(event["timestamp_utc"]).astimezone(ZoneInfo(timezone))
             # Include UTC offset to keep the two repeated DST hours distinct.
@@ -177,9 +182,9 @@ def build_report(
                 hourly_models[hour_key][model_key]["model"] = model_key
                 hourly_models[hour_key][model_key]["display_name"] = catalog.display_name(model_key)
             _add_event(hourly[hour_key], event, catalog,
-                       fast_standard_fallback=fast_standard_fallback)
+                       fast_standard_fallback=fast_standard_fallback, result=result)
             _add_event(hourly_models[hour_key][model_key], event, catalog,
-                       fast_standard_fallback=fast_standard_fallback)
+                       fast_standard_fallback=fast_standard_fallback, result=result)
 
     daily_rows = []
     for key in sorted(daily):
@@ -247,8 +252,8 @@ def build_projects_report(
                     "display_name": catalog.display_name(event.get("model")),
                 }
             )
-        _add_event(projects[project_key], event, catalog)
-        _add_event(project_models[project_key][model_key], event, catalog)
+        result = _add_event(projects[project_key], event, catalog)
+        _add_event(project_models[project_key][model_key], event, catalog, result=result)
 
     rows: list[dict[str, Any]] = []
     for project_key, bucket in projects.items():
@@ -315,8 +320,10 @@ def _session_bucket(key: str, titles: dict, metadata: dict) -> dict:
     return bucket
 
 
-def _add_session_event(bucket: dict, event: dict, catalog: PriceCatalog) -> None:
-    _add_event(bucket, event, catalog)
+def _add_session_event(
+    bucket: dict, event: dict, catalog: PriceCatalog, *, result: PriceResult | None = None,
+) -> PriceResult:
+    result = _add_event(bucket, event, catalog, result=result)
     project_key, project_name, project_path = _project_fields(event)
     model_key = str(event.get("model") or "unknown")
     model_name = catalog.display_name(event.get("model"))
@@ -327,6 +334,7 @@ def _add_session_event(bucket: dict, event: dict, catalog: PriceCatalog) -> None
     }
     bucket["model_entries"][model_key] = {"key": model_key, "display_name": model_name}
     bucket["last_activity"] = max(bucket["last_activity"], event["timestamp_utc"])
+    return result
 
 
 def _serialize_session(bucket: dict) -> dict:
@@ -368,11 +376,11 @@ def build_sessions_report(
         if event_id in seen:
             continue
         seen.add(event_id)
-        unique_events.append(event)
         key = session_key(event)
         if key not in own:
             own[key] = _session_bucket(key, titles, metadata)
-        _add_session_event(own[key], event, catalog)
+        result = _add_session_event(own[key], event, catalog)
+        unique_events.append((event, result))
         own[key]["is_subagent"] |= bool(event.get("is_subagent"))
 
     sessions = {}
@@ -388,8 +396,8 @@ def build_sessions_report(
         for index, member in enumerate(path):
             depth = len(path) - index - 1
             group["member_depths"][member] = depth
-    for event in unique_events:
-        _add_session_event(sessions[lineages[session_key(event)]], event, catalog)
+    for event, result in unique_events:
+        _add_session_event(sessions[lineages[session_key(event)]], event, catalog, result=result)
 
     rows = []
     for root, group in sessions.items():

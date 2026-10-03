@@ -46,15 +46,19 @@ class PricingStore:
 
     def capture(self) -> None:
         with self._lock:
-            payload = self.catalog().payload
-            payload["snapshot_source"] = self.database.get_pricing_catalog()["source"]
-            payload["snapshot_overrides"] = sorted(self.database.get_pricing_overrides())
-            self.database.record_price_revision(payload, datetime.now(UTC).isoformat())
-            self.database.capture_price_snapshots()
+            self._capture(self.catalog())
+
+    def _capture(self, catalog: PriceCatalog) -> None:
+        payload = copy.deepcopy(catalog.payload)
+        payload["snapshot_source"] = self.database.get_pricing_catalog()["source"]
+        payload["snapshot_overrides"] = sorted(self.database.get_pricing_overrides())
+        self.database.record_price_revision(payload, datetime.now(UTC).isoformat())
+        self.database.capture_price_snapshots()
 
     def prepare_events(self, events: list[dict], mode: str) -> list[dict]:
         with self._lock:
-            self.capture()
+            current = self.catalog()
+            self._capture(current)
             snapshots, revisions = self.database.price_snapshot_data(
                 [event["event_id"] for event in events]
             )
@@ -62,7 +66,6 @@ class PricingStore:
                 key: PriceCatalog(json.loads(row["payload_json"]))
                 for key, row in revisions.items()
             }
-            current = self.catalog()
             first_known: dict[str, dict | None] = {}
             first_catalogs: dict[str, PriceCatalog] = {}
             backfilled_catalogs: dict[tuple[int, str], PriceCatalog] = {}
@@ -119,7 +122,8 @@ class PricingStore:
     def _base_payload(self) -> dict[str, Any]:
         row = self.database.get_pricing_catalog()
         saved = json.loads(str(row["payload_json"]))
-        payload = PriceCatalog.load_default().payload
+        bundled = PriceCatalog.load_default()
+        payload = copy.deepcopy(bundled.payload)
         # Legacy document prices are no longer a fallback source. Keep previous
         # models.dev entries until the complete catalog has been acquired.
         for model, entry in saved["models"].items():
@@ -129,24 +133,25 @@ class PricingStore:
         cache = self._cached_models()
         if cache:
             models = set(payload["models"]) | {
-                self._canonical_model(model) for model in self.database.distinct_models()
+                self._canonical_model(model, bundled) for model in self.database.distinct_models()
             }
             for model in models:
                 try:
                     parsed = parse_model(model, cache["catalog"])
                 except (TypeError, ValueError):
                     continue
-                self._apply_model(payload, model, parsed, cache["fetched_at"])
+                self._apply_model(payload, model, parsed, cache["fetched_at"], bundled=bundled)
             payload["as_of"] = cache["fetched_at"][:10]
         for model, entry in payload["models"].items():
             entry["api_fast_multiplier"] = API_FAST_MULTIPLIERS.get(model)
         return payload
 
     @staticmethod
-    def _canonical_model(model: str) -> str:
+    def _canonical_model(model: str, bundled: PriceCatalog | None = None) -> str:
         raw = model.strip().lower()
         raw = raw.removeprefix("openai/")
-        return PriceCatalog.load_default().normalize_model(raw)
+        catalog = bundled if bundled is not None else PriceCatalog.load_default()
+        return catalog.normalize_model(raw)
 
     def _cached_models(self) -> dict[str, Any] | None:
         cached = self.database.get_metadata(CATALOG_CACHE_KEY)
@@ -155,16 +160,20 @@ class PricingStore:
         return json.loads(cached)
 
     @staticmethod
-    def _apply_model(payload: dict, model: str, parsed: dict, fetched_at: str) -> None:
+    def _apply_model(
+        payload: dict, model: str, parsed: dict, fetched_at: str,
+        *, bundled: PriceCatalog | None = None,
+    ) -> None:
         entry = payload["models"].setdefault(
             model, {"codex_credits": None, "credit_fast_multiplier": None},
         )
         # CodexBar supplements missing cache rates with bundled prices, never
         # a previous model card's rates or a different provider's same-name row.
-        bundled = PriceCatalog.load_default().models.get(model, {})
+        catalog = bundled if bundled is not None else PriceCatalog.load_default()
+        bundled_entry = catalog.models.get(model, {})
         for field in ("cached_input", "cache_write"):
             if parsed["api_usd"][field] is None:
-                parsed["api_usd"][field] = bundled.get("api_usd", {}).get(field)
+                parsed["api_usd"][field] = bundled_entry.get("api_usd", {}).get(field)
         entry.update(parsed)
         entry.update(api_fast_multiplier=API_FAST_MULTIPLIERS.get(model),
                      source_url=CATALOG_URL, price_source="models_dev", fetched_at=fetched_at)
