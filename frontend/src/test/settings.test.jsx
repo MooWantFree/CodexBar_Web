@@ -187,7 +187,8 @@ describe("log directory settings", () => {
       path: "/api/settings/select-folder", method: "POST", body: { initial_path: draft },
     });
     expect(configuration().codexHome).toBe(originalHome);
-    expect(document.querySelector("footer code").textContent).toBe(originalHome);
+    expect(document.querySelector(".log-directory-chip code").textContent).toBe(originalHome);
+    expect(document.querySelector("footer")).toBeNull();
     expect(requests.some(request => request.method === "PUT" || request.path === "/api/scan")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Save and scan" }));
     await waitFor(() => expect(configuration().codexHome).toBe(replacementHome));
@@ -242,7 +243,7 @@ describe("log directory settings", () => {
     expect(saveButton.disabled).toBe(false);
   });
 
-  it("saves the directory before scanning, then updates the footer, bounds, and account quota state", async () => {
+  it("saves the directory before scanning, then updates the header, bounds, and account quota state", async () => {
     const { requests } = mockSettingsApis();
     const { client } = mount();
     await ready();
@@ -250,8 +251,8 @@ describe("log directory settings", () => {
     client.setQueryData(["quota-value", "original-account", "snapshot"], { status: "ready", windows: [{ used_percent: 75 }] });
     fireEvent.change(directoryInput(), { target: { value: replacementHome } });
     fireEvent.click(screen.getByRole("button", { name: "Save and scan" }));
-    await waitFor(() => expect(document.querySelector("footer code").textContent).toBe(replacementHome));
-    expect(document.querySelector('.log-directory-chip code').textContent).toBe(replacementHome);
+    await waitFor(() => expect(document.querySelector(".log-directory-chip code").textContent).toBe(replacementHome));
+    expect(document.querySelector("footer")).toBeNull();
     expect(document.querySelector('.log-directory-chip').title).toBe(replacementHome);
     await waitFor(() => expect(configuration().maximumDate).toBe("2026-10-03"));
     const save = requests.find(request => request.path === "/api/settings" && request.method === "PUT");
@@ -273,7 +274,8 @@ describe("log directory settings", () => {
     fireEvent.change(directoryInput(), { target: { value: invalidHome } });
     fireEvent.click(screen.getByRole("button", { name: "Save and scan" }));
     await screen.findByRole("alert");
-    expect(document.querySelector("footer code").textContent).toBe(originalHome);
+    expect(document.querySelector(".log-directory-chip code").textContent).toBe(originalHome);
+    expect(document.querySelector("footer")).toBeNull();
     expect(configuration().codexHome).toBe(originalHome);
     expect(configuration().quotaScope).toBe("original-account");
     expect(client.getQueryData(["settings"]).codex_home).toBe(originalHome);
@@ -318,7 +320,8 @@ describe("log directory settings", () => {
     await ready();
     fireEvent.change(directoryInput(), { target: { value: replacementHome } });
     fireEvent.click(screen.getByRole("button", { name: "Save and scan" }));
-    await waitFor(() => expect(document.querySelector("footer code").textContent).toBe(replacementHome));
+    await waitFor(() => expect(document.querySelector(".log-directory-chip code").textContent).toBe(replacementHome));
+    expect(document.querySelector("footer")).toBeNull();
     await screen.findByText("Scanner is temporarily unavailable");
     expect(configuration().codexHome).toBe(replacementHome);
     expect(directoryInput().value).toBe(replacementHome);
@@ -336,6 +339,7 @@ describe("log directory settings", () => {
     expect(screen.getByLabelText("Codexログディレクトリ").value).toBe(replacementHome);
     expect(requests.filter(request => request.method === "PUT")).toHaveLength(1);
     await act(async () => releaseSave());
-    await waitFor(() => expect(document.querySelector("footer code").textContent).toBe(replacementHome));
+    await waitFor(() => expect(document.querySelector(".log-directory-chip code").textContent).toBe(replacementHome));
+    expect(document.querySelector("footer")).toBeNull();
   });
 });

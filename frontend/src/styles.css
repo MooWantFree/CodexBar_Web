@@ -340,9 +340,6 @@ th:first-child, td:first-child { text-align: left; } tbody tr:hover { background
 .path-label { display: block; max-width: 760px; margin-top: 5px; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .nested-charts { padding: 16px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; }
 
-footer { display: flex; justify-content: space-between; gap: 20px; padding: 13px 3px 0; color: var(--muted); font-size: 10px; }
-footer > span { min-width: 0; }
-footer code { overflow-wrap: anywhere; }
 code { color: #53647c; }
 
 .settings-panel { padding: 24px; }
@@ -406,5 +403,4 @@ code { color: #53647c; }
   .kpi-card-token strong { font-size: clamp(14px, 4.25vw, 20px); white-space: nowrap; }
   .chart-row { grid-template-columns: 45px minmax(85px,1fr) 90px; }.project-chart .chart-row { grid-template-columns: 95px minmax(35px,1fr) 85px; }.settings-panel { padding: 16px; }
   .project-selector-heading { align-items: stretch; flex-direction: column; }.project-selector-heading select { min-width: 0; width: 100%; }
-  footer { flex-direction: column; }
 }

@@ -101,6 +101,6 @@ export default function App() {
     <main className="app-main"><header className="topbar"><div><p className="eyebrow">{t(route.eyebrow)}</p><h1>{t(route.title)}</h1><p className="subtitle">{t(route.subtitle)}</p></div><div className="header-actions"><span className="log-directory-chip" title={codexHome} aria-label={`${t('日志目录')}：${codexHome}`}><span className="dot" /><span className="log-directory-label">{t('日志目录')}</span><code>{codexHome}</code></span>{route.path !== '/resets' && <button className="button primary" disabled={scanning} onClick={() => scan().catch(() => {})}>{t(scanning ? '扫描中…' : '扫描新日志')}</button>}</div></header>
       {showRange && <section className="control-panel panel"><DateControls key={location.key} /><AnalysisControls /></section>}<ErrorNotice error={scanError} />
       <PageErrorBoundary key={route.path}><Routes><Route path="/" element={<Navigate to={`/overview${location.search}`} replace />} /><Route path="/pricing" element={<Navigate to={`/settings${location.search}`} replace />} />{routes.map(item => <Route key={item.path} path={item.path} element={<item.component />} />)}<Route path="*" element={<Navigate to={`/overview${location.search}`} replace />} /></Routes></PageErrorBoundary>
-      <footer><span>{t('日志目录')}：<code>{codexHome}</code></span></footer></main>
+    </main>
   </>;
 }

@@ -47,23 +47,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('application header and footer', () => {
-  it('shows the full current log directory and follows configuration changes while keeping the footer directory', () => {
+describe('application header', () => {
+  it('shows the full current log directory and follows configuration changes without a page footer', () => {
     const {rerenderDashboard} = mount('/settings', {application: true});
     const chip = document.querySelector('.log-directory-chip');
     expect(chip.querySelector('code').textContent).toBe(originalHome);
     expect(chip.title).toBe(originalHome);
     expect(chip.getAttribute('aria-label')).toBe(`Log directory：${originalHome}`);
-    expect(document.querySelector('footer code').textContent).toBe(originalHome);
+    expect(document.querySelector('footer')).toBeNull();
     expect(screen.queryByText('Local data')).toBeNull();
-    expect(document.querySelector('footer').textContent).not.toContain('No message content stored');
     const selectedHome = 'E:\\Very long directory\\中文日志\\saved Codex source\\.codex';
     dashboard.current = {...dashboard.current, codexHome: selectedHome};
     rerenderDashboard();
     expect(chip.querySelector('code').textContent).toBe(selectedHome);
     expect(chip.title).toBe(selectedHome);
     expect(chip.getAttribute('aria-label')).toContain(selectedHome);
-    expect(document.querySelector('footer code').textContent).toBe(selectedHome);
+    expect(document.querySelector('footer')).toBeNull();
   });
 });
 
