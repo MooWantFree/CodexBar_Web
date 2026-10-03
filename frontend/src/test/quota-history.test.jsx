@@ -94,7 +94,7 @@ describe("quota saved history", () => {
     await act(async () => { await client.invalidateQueries({ predicate: query => query.queryKey[0] !== "quota" }); });
     expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("$8");
     expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8");
-    await waitFor(() => expect(document.querySelector("#quotaValueHistoryStatus").textContent).toContain("Displayed records retain values"));
+    await waitFor(() => expect(document.querySelector("#quotaValueHistoryPanel [role=alert]").textContent).toContain("Network unavailable"));
     expect(document.querySelector("#quotaValueHistoryPanel").getAttribute("aria-busy")).toBe("false");
   });
 
