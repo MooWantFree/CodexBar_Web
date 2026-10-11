@@ -1,3 +1,5 @@
+from decimal import Decimal, localcontext
+
 import pytest
 
 from codex_token_report.pricing import PriceCatalog
@@ -201,6 +203,53 @@ def test_project_reports_match_total_and_preserve_model_breakdown() -> None:
     assert len(projects["projects"][0]["models"]) == 2
     assert sum(row["total_tokens"] for row in daily["daily"]) == 330
     assert daily["project"]["display_name"] == "alpha"
+
+
+def test_report_preserves_event_order_for_decimal_sums_across_groups() -> None:
+    catalog = PriceCatalog.load_default()
+    catalog.basis_tokens = Decimal(1)
+    for model in ("gpt-5.6-terra", "gpt-6-astra"):
+        catalog.models[model]["api_usd"]["input"] = 1
+    base = {
+        "local_date": "2026-10-01", "timestamp_utc": "2026-10-01T01:00:00Z",
+        "model": "gpt-5.6-terra", "service_tier": "standard",
+        "input_tokens": 10000, "cached_input_tokens": 0,
+        "cache_write_input_tokens": 0, "output_tokens": 0, "reasoning_output_tokens": 0,
+    }
+    events = [base] + [{**base, "model": "gpt-6-astra", "input_tokens": 1} for _ in range(9)]
+    # At low precision, summing model subtotals would produce 10010. Each
+    # grouping must instead add individual request prices in their original order.
+    with localcontext() as context:
+        context.prec = 4
+        report = build_report(events, catalog, start=None, end=None)
+    for bucket in (report["total"], report["daily"][0], report["hourly"][0]):
+        assert bucket["api_usd_known"] == bucket["standard_api_usd_known"] == 10000
+    assert [row["api_usd_known"] for row in report["models"]] == [10000, 9]
+
+
+def test_report_keeps_missing_timestamps_and_model_tie_order() -> None:
+    base = {
+        "local_date": "2026-11-01", "model": "second-model",
+        "timestamp_utc": "2026-11-01T06:30:00Z", "service_tier": "standard",
+        "input_tokens": 10, "cached_input_tokens": 0, "cache_write_input_tokens": 0,
+        "output_tokens": 1, "reasoning_output_tokens": 0,
+    }
+    events = [base, {**base, "model": "first-model", "timestamp_utc": "2026-11-01T05:30:00Z"},
+              {**base, "model": None, "timestamp_utc": None}]
+    report = build_report(events, PriceCatalog.load_default(), start=None, end=None,
+                          timezone="America/New_York")
+    assert report["total"]["calls"] == report["daily"][0]["calls"] == 3
+    assert [row["key"] for row in report["models"]] == ["second-model", "first-model", "unknown"]
+    assert [row["key"] for row in report["daily"][0]["models"]] == [
+        "second-model", "first-model", "unknown",
+    ]
+    assert [row["key"] for row in report["hourly"]] == [
+        "2026-11-01T01:00:00-04:00", "2026-11-01T01:00:00-05:00",
+    ]
+    assert [row["models"][0]["key"] for row in report["hourly"]] == [
+        "first-model", "second-model",
+    ]
+    assert sum(row["calls"] for row in report["hourly"]) == 2
 
 
 def session_label_event(key, **fields):

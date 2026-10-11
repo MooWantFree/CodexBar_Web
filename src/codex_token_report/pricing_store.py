@@ -56,6 +56,13 @@ class PricingStore:
         self.database.capture_price_snapshots()
 
     def prepare_events(self, events: list[dict], mode: str) -> list[dict]:
+        prepared, _ = self.prepare_report_events(events, mode)
+        return prepared
+
+    def prepare_report_events(
+        self, events: list[dict], mode: str,
+    ) -> tuple[list[dict], PriceCatalog]:
+        """Prepare snapshots and return the same current catalog for the report."""
         with self._lock:
             current = self.catalog()
             self._capture(current)
@@ -117,7 +124,7 @@ class PricingStore:
                                     source="override" if key in known.payload.get("snapshot_overrides", [])
                                     else known.payload.get("snapshot_source", "unknown"),
                                 )
-            return events
+            return events, current
 
     def _base_payload(self) -> dict[str, Any]:
         row = self.database.get_pricing_catalog()

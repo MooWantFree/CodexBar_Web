@@ -80,3 +80,23 @@ def test_prepare_events_builds_one_catalog_without_adding_snapshot_metadata(
     assert "snapshot_overrides" not in catalogs[0].payload
     assert events[0]["price_snapshot"]["source"] == "bundled"
     assert ("_price_catalog" in events[0]) == (mode == "snapshot")
+
+
+@pytest.mark.parametrize("mode", ["snapshot", "current"])
+def test_prepared_report_reuses_current_catalog(tmp_path, monkeypatch, mode):
+    database = Database(tmp_path / "usage.sqlite3")
+    store = PricingStore(database=database)
+    _insert_event(database)
+    current = store.catalog()
+    calls = []
+
+    def catalog():
+        calls.append(True)
+        return current
+
+    monkeypatch.setattr(store, "catalog", catalog)
+    events, report_catalog = store.prepare_report_events(database.fetch_events(), mode)
+    assert calls == [True]
+    assert report_catalog is current
+    assert events[0]["price_snapshot"]["source"] == "bundled"
+    assert ("_price_catalog" in events[0]) == (mode == "snapshot")

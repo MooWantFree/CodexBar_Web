@@ -29,6 +29,7 @@ from pydantic import BaseModel, field_validator
 from .config import CODEX_HOME_METADATA_KEY, Settings, load_saved_settings, validate_codex_home
 from .db import Database
 from .folder_picker import FolderPicker
+from .pricing import PriceCatalog
 from .pricing_store import PricingStore
 from .quota import QuotaService
 from .quota_value import build_quota_value_report
@@ -426,12 +427,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return replace(selected, price_mode=price_mode)
 
-    async def range_events(selected: ReportRange, project_key: str | None = None) -> list[dict]:
-        events = await asyncio.to_thread(
-            database.fetch_events, selected.start, selected.end, project_key,
+    def load_range_events(
+        selected: ReportRange, project_key: str | None = None,
+    ) -> tuple[list[dict], PriceCatalog]:
+        events = database.fetch_events(
+            selected.start, selected.end, project_key,
             start_at=selected.start_at, end_before=selected.end_before,
         )
-        return await asyncio.to_thread(pricing.prepare_events, events, selected.price_mode)
+        return pricing.prepare_report_events(events, selected.price_mode)
+
+    async def range_events(
+        selected: ReportRange, project_key: str | None = None,
+    ) -> tuple[list[dict], PriceCatalog]:
+        return await asyncio.to_thread(load_range_events, selected, project_key)
 
     range_dependency = Depends(report_range)
 
@@ -549,22 +557,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
-    @app.get("/api/summary")
-    async def summary(selected: ReportRange = range_dependency) -> dict:
-        events = await range_events(selected)
-        catalog = pricing.catalog()
+    def summary_response(selected: ReportRange) -> JSONResponse:
+        events, catalog = load_range_events(selected)
         report = build_report(events, catalog, start=selected.start, end=selected.end,
                               timezone=active_settings.timezone)
         report["range"].update(selected.public())
         report["storage"] = database.storage_stats()
         last_scan = database.get_metadata("last_scan")
         report["last_scan"] = json.loads(last_scan) if last_scan else None
-        return report
+        return JSONResponse(report)
+
+    @app.get("/api/summary")
+    async def summary(selected: ReportRange = range_dependency) -> JSONResponse:
+        # Large ranges must not block navigation, health checks or quota reads.
+        return await asyncio.to_thread(summary_response, selected)
 
     @app.get("/api/sessions")
     async def sessions(selected: ReportRange = range_dependency) -> dict:
-        events = await range_events(selected)
-        rows = build_sessions_report(events, pricing.catalog(), database.session_titles(),
+        events, catalog = await range_events(selected)
+        rows = build_sessions_report(events, catalog, database.session_titles(),
                                      database.session_metadata())
         return {"range": selected.public(), "sessions": rows,
                 "inferred_price_calls": sum(row["inferred_price_calls"] for row in rows)}
@@ -579,8 +590,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         sort_direction: Literal["ascending", "descending"] = Query(default="descending"),
         scope: Literal["tree", "self"] = Query(default="self"),
     ) -> dict:
-        all_events = await range_events(selected)
-        catalog = pricing.catalog()
+        all_events, catalog = await range_events(selected)
         groups = build_sessions_report(all_events, catalog, database.session_titles(),
                                        database.session_metadata())
         if scope == "tree":
@@ -656,9 +666,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/projects")
     async def projects(selected: ReportRange = range_dependency) -> dict:
-        events = await range_events(selected)
+        events, catalog = await range_events(selected)
         report = build_projects_report(
-            events, pricing.catalog(), start=selected.start, end=selected.end,
+            events, catalog, start=selected.start, end=selected.end,
         )
         report["range"].update(selected.public())
         return report
@@ -671,10 +681,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         identity = await asyncio.to_thread(database.project_identity, project)
         if identity is None:
             raise HTTPException(status_code=404, detail="项目不存在")
-        events = await range_events(selected, project)
+        events, catalog = await range_events(selected, project)
         report = build_project_daily_report(
             events,
-            pricing.catalog(),
+            catalog,
             project_key=project,
             project_path=identity.get("project_path"),
             start=selected.start,
@@ -780,8 +790,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         selected: ReportRange = range_dependency,
         grain: Literal["daily", "hourly"] = Query(default="daily"),
     ) -> Response:
-        events = await range_events(selected)
-        catalog = pricing.catalog()
+        events, catalog = await range_events(selected)
         report = build_report(events, catalog, start=selected.start, end=selected.end,
                               timezone=active_settings.timezone)
         buffer = io.StringIO(newline="")

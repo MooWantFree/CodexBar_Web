@@ -1,11 +1,66 @@
+import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
+from codex_token_report import main
 from codex_token_report.config import Settings
 from codex_token_report.main import create_app
+
+
+def test_summary_does_not_block_other_requests(tmp_path, monkeypatch):
+    app = create_app(Settings(codex_home=tmp_path, data_dir=tmp_path / "data"))
+    # Exercise concurrent HTTP requests without starting the log scanner.
+    app.state.scan_status = {"state": "idle"}
+    started, release = threading.Event(), threading.Event()
+    original = main.build_report
+
+    def slow_report(*args, **kwargs):
+        started.set()
+        if not release.wait(5):
+            raise RuntimeError("summary blocked the server")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(main, "build_report", slow_report)
+
+    async def requests():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://testserver",
+        ) as client:
+            summary = asyncio.create_task(client.get("/api/summary"))
+            try:
+                assert await asyncio.to_thread(started.wait, 2)
+                health = await asyncio.wait_for(client.get("/api/health"), timeout=1)
+                assert health.status_code == 200
+                assert not summary.done()
+            finally:
+                release.set()
+                response = await summary
+            assert response.status_code == 200
+            assert response.json()["total"]["calls"] == 0
+
+    asyncio.run(requests())
+
+
+def test_usage_endpoints_build_current_catalog_once(tmp_path, monkeypatch):
+    app = create_app(Settings(codex_home=tmp_path, data_dir=tmp_path / "data"))
+    original = app.state.pricing.catalog
+    calls = []
+
+    def catalog():
+        calls.append(True)
+        return original()
+
+    monkeypatch.setattr(app.state.pricing, "catalog", catalog)
+    client = TestClient(app)
+    for endpoint in ("summary", "sessions", "projects", "export.csv"):
+        calls.clear()
+        response = client.get(f"/api/{endpoint}")
+        assert response.status_code == 200
+        assert calls == [True], endpoint
 
 
 def test_startup_pricing_waits_for_scan_without_blocking_pages(tmp_path):

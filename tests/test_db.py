@@ -304,3 +304,95 @@ def test_session_metadata_rejects_invalid_parent_ids(tmp_path: Path) -> None:
         identity: {"parent_session_id": None, "is_subagent": False}
         for identity in ("self", "empty", "number")
     }
+
+
+def test_distinct_models_keeps_only_reportable_effective_models(
+    alias_database: Database, alias_event: dict[str, Any]
+) -> None:
+    variants = [
+        {"event_id": "fallback", "model": "fallback-model", "pricing_model": None},
+        {"event_id": "excluded", "pricing_model": "excluded-model"},
+        {"event_id": "inactive", "model": "ignored-model", "pricing_model": "priced-model"},
+        {"event_id": "shared-excluded", "pricing_model": "shared-model"},
+        {"event_id": "shared-visible", "pricing_model": "shared-model"},
+        {"event_id": "empty", "pricing_model": ""},
+        {"event_id": "unknown", "model": None, "pricing_model": None},
+    ]
+    with alias_database.connect() as connection:
+        Database._insert_events(connection, Database._event_list([
+            {**alias_event, **variant} for variant in variants
+        ]))
+        connection.executemany(
+            "INSERT INTO usage_event_exclusions VALUES (?, 'duplicate', ?, '2026-09-20')",
+            [("excluded", 1), ("inactive", 0), ("shared-excluded", 1)],
+        )
+
+    assert alias_database.distinct_models() == ["fallback-model", "priced-model", "shared-model"]
+    with alias_database.connect() as connection:
+        connection.execute("UPDATE usage_event_exclusions SET active = 0")
+    assert alias_database.distinct_models() == [
+        "excluded-model", "fallback-model", "priced-model", "shared-model",
+    ]
+
+
+def test_storage_stats_count_all_reportable_tiers_and_file_errors(
+    alias_database: Database, alias_event: dict[str, Any]
+) -> None:
+    assert alias_database.storage_stats() == {
+        "events": 0, "files": 0, "parse_errors": 0,
+        "standard_events": 0, "priority_events": 0, "unknown_events": 0,
+        "trace_coverage_intervals": 0, "max_trace_gap_hours": 0.0,
+        "last_trace_coverage_end": None,
+    }
+    with alias_database.connect() as connection:
+        Database._insert_events(connection, Database._event_list([
+            {**alias_event, "event_id": key, "service_tier": tier}
+            for key, tier in [
+                ("standard", "standard"), ("priority", "priority"),
+                ("unknown", "unknown"), ("other", "custom"), ("excluded", "priority"),
+            ]
+        ]))
+        connection.execute(
+            "INSERT INTO usage_event_exclusions VALUES ('excluded', 'duplicate', 1, '2026-09-20')"
+        )
+        connection.executemany(
+            "INSERT INTO file_state "
+            "(source_file, mtime_ns, size_bytes, event_count, parse_errors, scanned_at) "
+            "VALUES (?, 1, 1, 1, ?, '2026-09-20')",
+            [("first", 2), ("second", 3)],
+        )
+    stats = alias_database.storage_stats()
+    assert {key: stats[key] for key in [
+        "events", "files", "parse_errors", "standard_events",
+        "priority_events", "unknown_events", "custom_events",
+    ]} == {
+        "events": 4, "files": 2, "parse_errors": 5,
+        "standard_events": 1, "priority_events": 1, "unknown_events": 1, "custom_events": 1,
+    }
+
+
+def test_fetch_events_preserves_columns_order_and_exact_project_range(
+    alias_database: Database, alias_event: dict[str, Any]
+) -> None:
+    variants = [
+        ("before", "00:59:59", None), ("first", "01:00:00", ""),
+        ("second", "01:15:00", None), ("excluded", "01:30:00", None),
+        ("project", "01:45:00", "known-project"), ("end", "02:00:00", None),
+    ]
+    events = Database._event_list([
+        {**alias_event, "event_id": key, "timestamp_utc": f"2026-09-20T{clock}+00:00",
+         "project_key": project, "working_directory": "E:\\项目", "model": None}
+        for key, clock, project in variants
+    ])
+    with alias_database.connect() as connection:
+        Database._insert_events(connection, list(reversed(events)))
+        connection.execute(
+            "INSERT INTO usage_event_exclusions VALUES ('excluded', 'duplicate', 1, '2026-09-20')"
+        )
+
+    actual = alias_database.fetch_events(
+        "2026-09-20", "2026-09-20", "unknown",
+        start_at="2026-09-20T01:00:00+00:00", end_before="2026-09-20T02:00:00+00:00",
+    )
+    assert actual == events[1:3]
+    assert alias_database.fetch_events("2026-09-21", "2026-09-21") == []

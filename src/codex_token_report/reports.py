@@ -41,8 +41,9 @@ def _empty_bucket(key: str) -> dict[str, Any]:
 
 
 def _add_event(
-    bucket: dict[str, Any], event: dict[str, Any], catalog: PriceCatalog,
+    primary_bucket: dict[str, Any], event: dict[str, Any], catalog: PriceCatalog,
     *, fast_standard_fallback: bool = True, result: PriceResult | None = None,
+    additional_buckets: tuple[dict[str, Any], ...] = (),
 ) -> PriceResult:
     input_tokens = int(event["input_tokens"])
     cached = int(event["cached_input_tokens"])
@@ -61,52 +62,66 @@ def _add_event(
             service_tier=service_tier,
         )
     service_tier = result.service_tier
-    bucket["calls"] += 1
-    bucket["inferred_price_calls"] += int(event.get("price_snapshot", {}).get("inferred", False))
-    bucket["input_tokens"] += input_tokens
-    bucket["uncached_input_tokens"] += max(0, input_tokens - cached - cache_write)
-    bucket["cached_input_tokens"] += cached
-    bucket["cache_write_input_tokens"] += cache_write
-    bucket["output_tokens"] += output
-    bucket["reasoning_output_tokens"] += int(event["reasoning_output_tokens"])
-    bucket["total_tokens"] += input_tokens + output
-    bucket["long_context_calls"] += int(result.is_long_context)
-    if service_tier == "priority":
-        bucket["fast_calls"] += 1
-        bucket["fast_tokens"] += input_tokens + output
-    elif service_tier == "standard":
-        bucket["standard_calls"] += 1
-    else:
-        bucket["unknown_tier_calls"] += 1
-    if result.standard_api_usd is not None:
-        bucket["standard_api_usd_known"] += result.standard_api_usd
-    if service_tier == "priority" and result.api_usd is None:
-        bucket["unknown_fast_price_calls"] += 1
-    if result.api_usd is not None:
-        bucket["priced_calls"] += 1
-        bucket["api_usd_known"] += result.api_usd
-        bucket["fast_surcharge_usd"] += result.api_usd - (
+    inferred = int(event.get("price_snapshot", {}).get("inferred", False))
+    uncached = max(0, input_tokens - cached - cache_write)
+    reasoning = int(event["reasoning_output_tokens"])
+    tokens = input_tokens + output
+    long_context = int(result.is_long_context)
+    fallback = (
+        fast_standard_fallback
+        and result.api_usd is None
+        and service_tier == "priority"
+        and result.api_tier_multiplier is None
+        and result.standard_api_usd is not None
+        and event_catalog.can_estimate_fast_from_standard(pricing_model)
+    )
+    surcharge = (
+        result.api_usd - (
             result.standard_api_usd if result.standard_api_usd is not None else result.api_usd
-        )
-    else:
-        bucket["unpriced_tokens"] += input_tokens + output
-        if (
-            fast_standard_fallback
-            and service_tier == "priority"
-            and result.api_tier_multiplier is None
-            and result.standard_api_usd is not None
-            and event_catalog.can_estimate_fast_from_standard(pricing_model)
-        ):
-            # Count a displayable Standard base without claiming the Fast rate
-            # is known, adding a surcharge, or increasing price coverage.
+        ) if result.api_usd is not None else Decimal(0)
+    )
+    standard_credits = result.standard_codex_credits or Decimal(0)
+    # Normalize and evaluate a request once, while retaining event-order Decimal
+    # additions in every grouping (rolling up subtotals changes rounding order).
+    for bucket in (primary_bucket, *additional_buckets):
+        bucket["calls"] += 1
+        bucket["inferred_price_calls"] += inferred
+        bucket["input_tokens"] += input_tokens
+        bucket["uncached_input_tokens"] += uncached
+        bucket["cached_input_tokens"] += cached
+        bucket["cache_write_input_tokens"] += cache_write
+        bucket["output_tokens"] += output
+        bucket["reasoning_output_tokens"] += reasoning
+        bucket["total_tokens"] += tokens
+        bucket["long_context_calls"] += long_context
+        if service_tier == "priority":
+            bucket["fast_calls"] += 1
+            bucket["fast_tokens"] += tokens
+        elif service_tier == "standard":
+            bucket["standard_calls"] += 1
+        else:
+            bucket["unknown_tier_calls"] += 1
+        if result.standard_api_usd is not None:
+            bucket["standard_api_usd_known"] += result.standard_api_usd
+        if service_tier == "priority" and result.api_usd is None:
+            bucket["unknown_fast_price_calls"] += 1
+        if result.api_usd is not None:
             bucket["priced_calls"] += 1
-            bucket["api_usd_known"] += result.standard_api_usd
-            bucket["fast_standard_fallback_calls"] += 1
-            bucket["fast_standard_fallback_usd"] += result.standard_api_usd
-    if result.codex_credits is not None:
-        bucket["credit_priced_calls"] += 1
-        bucket["credits_known"] += result.codex_credits
-        bucket["standard_credits_known"] += result.standard_codex_credits or Decimal(0)
+            bucket["api_usd_known"] += result.api_usd
+            bucket["fast_surcharge_usd"] += surcharge
+        else:
+            bucket["unpriced_tokens"] += tokens
+            if fallback:
+                # Count a displayable Standard base without claiming the Fast rate
+                # is known, adding a surcharge, or increasing price coverage.
+                bucket["priced_calls"] += 1
+                bucket["api_usd_known"] += result.standard_api_usd
+                bucket["fast_standard_fallback_calls"] += 1
+                bucket["fast_standard_fallback_usd"] += result.standard_api_usd
+        if result.codex_credits is not None:
+            bucket["credit_priced_calls"] += 1
+            bucket["credits_known"] += result.codex_credits
+            bucket["standard_credits_known"] += standard_credits
     return result
 
 
@@ -162,14 +177,7 @@ def build_report(
             daily_models[date_key][model_key]["display_name"] = catalog.display_name(
                 event.get("model")
             )
-        # A request has one price; reuse it across every grouping in this report.
-        result = _add_event(total, event, catalog, fast_standard_fallback=fast_standard_fallback)
-        _add_event(daily[date_key], event, catalog,
-                   fast_standard_fallback=fast_standard_fallback, result=result)
-        _add_event(models[model_key], event, catalog,
-                   fast_standard_fallback=fast_standard_fallback, result=result)
-        _add_event(daily_models[date_key][model_key], event, catalog,
-                   fast_standard_fallback=fast_standard_fallback, result=result)
+        buckets = (daily[date_key], models[model_key], daily_models[date_key][model_key])
         if event.get("timestamp_utc"):
             stamp = datetime.fromisoformat(event["timestamp_utc"]).astimezone(ZoneInfo(timezone))
             # Include UTC offset to keep the two repeated DST hours distinct.
@@ -181,10 +189,9 @@ def build_report(
                 hourly_models[hour_key][model_key] = _empty_bucket(model_key)
                 hourly_models[hour_key][model_key]["model"] = model_key
                 hourly_models[hour_key][model_key]["display_name"] = catalog.display_name(model_key)
-            _add_event(hourly[hour_key], event, catalog,
-                       fast_standard_fallback=fast_standard_fallback, result=result)
-            _add_event(hourly_models[hour_key][model_key], event, catalog,
-                       fast_standard_fallback=fast_standard_fallback, result=result)
+            buckets += (hourly[hour_key], hourly_models[hour_key][model_key])
+        _add_event(total, event, catalog, fast_standard_fallback=fast_standard_fallback,
+                   additional_buckets=buckets)
 
     daily_rows = []
     for key in sorted(daily):

@@ -245,6 +245,16 @@ class Database:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_usage_session_id ON usage_events(session_id)"
         )
+        # Cover report metadata and snapshot checks without reading every wide
+        # event row. These columns must exist before indexing older databases.
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_usage_report_model "
+            "ON usage_events(COALESCE(pricing_model, model), event_id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_usage_report_tier "
+            "ON usage_events(service_tier, event_id, timestamp_utc)"
+        )
 
     @staticmethod
     def _migrate_file_state(connection: sqlite3.Connection) -> None:
@@ -939,7 +949,13 @@ class Database:
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         query = f"SELECT * FROM usage_events {where} ORDER BY timestamp_utc"
         with self.connect() as connection:
-            return [dict(row) for row in connection.execute(query, values).fetchall()]
+            cursor = connection.cursor()
+            cursor.row_factory = None
+            cursor.execute(query, values)
+            columns = tuple(column[0] for column in cursor.description)
+            # sqlite3.Row performs a name lookup per column when converted to a
+            # dict; pair tuple values with the shared column names instead.
+            return [dict(zip(columns, row)) for row in cursor]
 
     def project_identity(self, project_key: str) -> dict[str, str | None] | None:
         if project_key == "unknown":
@@ -1086,11 +1102,18 @@ class Database:
         with self.connect() as connection:
             rows = connection.execute(
                 """
-                SELECT DISTINCT COALESCE(pricing_model, model) AS model
-                FROM reportable_usage_events
-                WHERE COALESCE(pricing_model, model) IS NOT NULL
-                  AND COALESCE(pricing_model, model) != ''
-                ORDER BY model
+                SELECT candidate.model
+                FROM (
+                    SELECT DISTINCT COALESCE(pricing_model, model) AS model
+                    FROM usage_events
+                    WHERE COALESCE(pricing_model, model) IS NOT NULL
+                      AND COALESCE(pricing_model, model) != ''
+                ) AS candidate
+                WHERE EXISTS (
+                    SELECT 1 FROM reportable_usage_events AS event
+                    WHERE COALESCE(event.pricing_model, event.model) = candidate.model
+                )
+                ORDER BY candidate.model
                 """
             ).fetchall()
         return [str(row["model"]) for row in rows]
@@ -1204,16 +1227,19 @@ class Database:
 
     def storage_stats(self) -> dict[str, Any]:
         with self.connect() as connection:
-            events = connection.execute("SELECT COUNT(*) FROM reportable_usage_events").fetchone()[0]
-            files = connection.execute("SELECT COUNT(*) FROM file_state").fetchone()[0]
-            errors = connection.execute(
-                "SELECT COALESCE(SUM(parse_errors), 0) FROM file_state"
-            ).fetchone()[0]
+            files = connection.execute(
+                "SELECT COUNT(*) AS files, COALESCE(SUM(parse_errors), 0) AS parse_errors "
+                "FROM file_state"
+            ).fetchone()
             tier_rows = connection.execute(
                 "SELECT service_tier, COUNT(*) FROM reportable_usage_events GROUP BY service_tier"
             ).fetchall()
             coverage_stats = self._trace_coverage_stats(connection)
-        result = {"events": int(events), "files": int(files), "parse_errors": int(errors)}
+        result = {
+            "events": sum(int(row[1]) for row in tier_rows),
+            "files": int(files["files"]),
+            "parse_errors": int(files["parse_errors"]),
+        }
         result.update({f"{row[0]}_events": int(row[1]) for row in tier_rows})
         for tier in ("standard", "priority", "unknown"):
             result.setdefault(f"{tier}_events", 0)
