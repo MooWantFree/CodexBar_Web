@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {t, addMessages, locale} from '../lib/i18n';
 import {formatNumber, formatCompact, modelColor, modelName} from '../lib/format';
 import {CostValue, unknownCostTitle, costText} from './CostValue';
+import {LoadingStatus, UsageSkeleton, UsageTableSkeleton} from './UsageSkeleton';
 
 addMessages({
   en: {'暂无数据': 'No data', '正在读取…': 'Loading…', '上一页': 'Previous', '下一页': 'Next', '日期': 'Date', '调用': 'Calls', '普通输入': 'Uncached input', '缓存输入': 'Cached input', '缓存': 'Cached', '总 Token': 'Total tokens', 'API 等价': 'API equivalent', 'Fast API 加价': 'Fast API surcharge', '档位覆盖': 'Tier coverage', '价格覆盖': 'Price coverage', '定价覆盖 {percent}% 调用': 'Pricing covers {percent}% of calls', '定价 {percent}%': 'Priced {percent}%', '未知': 'Unknown', '升序': 'ascending', '降序': 'descending', '{label}：点击按{direction}排序': '{label}: sort {direction}', '这个日期范围还没有可统计的记录。': 'No records in this date range.'},
@@ -10,9 +11,9 @@ addMessages({
 
 export function EmptyState({children = t('暂无数据')}) { return <div className="empty-state">{children}</div>; }
 export function ErrorNotice({error}) { return error ? <p className="status-strip error-text" role="alert">{error.message || String(error)}</p> : null; }
-export function LoadingState() { return <p className="fine-print" role="status">{t('正在读取…')}</p>; }
-export function Pager({page, pages, onPage, disabled = false}) {
-  return <div className="pager"><button className="button" disabled={disabled || page <= 0} onClick={() => onPage(page - 1)}>{t('上一页')}</button><span aria-live="polite">{pages ? `${formatNumber(page + 1)} / ${formatNumber(pages)}` : '0 / 0'}</span><button className="button" disabled={disabled || page + 1 >= pages} onClick={() => onPage(page + 1)}>{t('下一页')}</button></div>;
+export function LoadingState() { return <><LoadingStatus loading/><UsageSkeleton className="usage-line-skeleton"/></>; }
+export function Pager({page, pages, onPage, disabled = false, loading = false}) {
+  return <div className="pager"><button className="button" disabled={disabled || loading || page <= 0} onClick={() => onPage(page - 1)}>{t('上一页')}</button><span aria-live="polite">{loading ? <UsageSkeleton className="usage-inline-skeleton"/> : pages ? `${formatNumber(page + 1)} / ${formatNumber(pages)}` : '0 / 0'}</span><button className="button" disabled={disabled || loading || page + 1 >= pages} onClick={() => onPage(page + 1)}>{t('下一页')}</button></div>;
 }
 export function Coverage({value}) { return <span className={`coverage ${value === 100 ? '' : 'partial'}`}>{value?.toFixed(1) || '0'}%</span>; }
 export function StackedChart({rows = [], metric = 'total_tokens'}) {
@@ -25,7 +26,7 @@ export function StackedChart({rows = [], metric = 'total_tokens'}) {
     <span className="chart-value">{isCost ? <CostValue row={row} unknownOnly={row.unknown_price_calls > 0 && !row.priced_calls}/> : formatCompact(row[metric])}{isCost && row.unknown_price_calls > 0 && <small className="chart-warning" title={unknownCostTitle(row)}>{t('定价 {percent}%', {percent: row.price_coverage_percent?.toFixed(0)})}</small>}</span>
   </div>)}</>;
 }
-export function UsageTable({rows = [], project = false}) {
+export function UsageTable({rows = [], project = false, loading = false}) {
   const [sort, setSort] = useState({key: 'api_usd_known', direction: 'descending'});
   const fields = project
     ? [['key', '日期'], ['calls', '调用'], ['input_tokens', 'Input'], ['cached_input_tokens', '缓存'], ['output_tokens', 'Output'], ['total_tokens', '总 Token'], ['api_usd_known', 'API 等价'], ['price_coverage_percent', '价格覆盖']]
@@ -42,6 +43,6 @@ export function UsageTable({rows = [], project = false}) {
     return Number(missingLeft) - Number(missingRight) || (missingLeft ? 0 : (typeof left === 'string' ? left.localeCompare(right, locale) : left - right) * (sort.direction === 'ascending' ? 1 : -1));
   });
   return <table><thead><tr>{fields.map(([key, label]) => <th key={key} aria-sort={sort?.key === key ? sort.direction : 'none'}><button className="table-sort" aria-label={t('{label}：点击按{direction}排序', {label: t(label), direction: t(sort?.key === key && sort.direction === 'ascending' ? '降序' : '升序')})} onClick={() => setSort({key, direction: sort?.key === key && sort.direction === 'ascending' ? 'descending' : 'ascending'})}>{t(label)} <span className="sort-indicator">{sort?.key === key ? sort.direction === 'ascending' ? '↑' : '↓' : '↕'}</span></button></th>)}</tr></thead>
-    <tbody>{sorted.map(row => <tr key={row.key}>{fields.map(([key]) => <td key={key}>{key === 'key' ? row.label || row.key : key.endsWith('_percent') ? <Coverage value={row[key]} /> : key === 'api_usd_known' ? <CostValue row={row}/> : key === 'fast_surcharge_usd' ? <CostValue row={row} kind="fast"/> : formatNumber(row[key])}</td>)}</tr>)}{!rows.length && <tr><td colSpan={fields.length}><EmptyState /></td></tr>}</tbody></table>;
+    <tbody>{loading ? <UsageTableSkeleton columns={fields.length}/> : sorted.map(row => <tr key={row.key}>{fields.map(([key]) => <td key={key}>{key === 'key' ? row.label || row.key : key.endsWith('_percent') ? <Coverage value={row[key]} /> : key === 'api_usd_known' ? <CostValue row={row}/> : key === 'fast_surcharge_usd' ? <CostValue row={row} kind="fast"/> : formatNumber(row[key])}</td>)}</tr>)}{!loading && !rows.length && <tr><td colSpan={fields.length}><EmptyState /></td></tr>}</tbody></table>;
 }
 

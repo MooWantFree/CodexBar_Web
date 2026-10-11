@@ -6,6 +6,7 @@ import { t } from "../../lib/i18n";
 import { systemMessage } from "../../lib/systemMessages";
 import { formatNumber, quotaWindowLabel } from "../../lib/format";
 import { EmptyState, ErrorNotice, Pager } from "../../components/Shared";
+import { LoadingStatus, UsageSkeleton, UsageTableSkeleton } from "../../components/UsageSkeleton";
 import { HistoryNotice, historyContext, planLabel, valueTime, percent, valueMoney } from "./QuotaShared";
 import "../quotaMessages";
 
@@ -57,12 +58,21 @@ function QuotaValueCard({ window, report, saved }) {
   </article>;
 }
 
+function QuotaValueCardSkeleton({ window }) {
+  const metrics = ["Quota used during the period", "API-equivalent amount", "Equivalent dollars per 1%", "Full window (100%) estimate"];
+  return <article className="panel quota-value-card" aria-hidden="true">
+    <div className="panel-heading"><div className="quota-value-window-title"><h2>{window ? quotaWindowLabel(window) : <UsageSkeleton className="usage-heading-skeleton" />}</h2></div><UsageSkeleton className="usage-inline-skeleton" style={{ width: 80 }} /></div>
+    <div className="quota-value-range">{["Cycle start", "Reporting cutoff time", "Next reset"].map(label => <span key={label}>{t(label)}<strong><UsageSkeleton className="usage-line-skeleton" style={{ width: 170 }} /></strong></span>)}</div>
+    <dl className="quota-value-metrics">{metrics.map(label => <div key={label}><dt>{t(label)}</dt><dd><UsageSkeleton className="usage-kpi-value" /></dd><small><UsageSkeleton className="usage-line-skeleton" /></small></div>)}</dl>
+  </article>;
+}
+
 const historyHeaders = ["Window / plan", "Cycle start", "Last used quota", "Consumed equivalent amount", "Last read", "Estimate per 1%", "100% estimate", "Snapshots", "Reading details"];
 const observationHeaders = ["Read time", "Used quota", "Known API-equivalent amount", "Estimate per 1%", "100% estimate", "Remaining quota estimate", "Notes"];
 const compatibilityError = () => new Error(t("The backend response is incompatible. Restart the application and try again."));
 
 export function QuotaValuePage() {
-  const { quota, quotaLoading, quotaRefreshing, refreshQuota, scan, scanning, range, setRange } = useDashboard();
+  const { quota, quotaLoading, quotaRefreshing, quotaError, refreshQuota, scan, scanning, range, setRange } = useDashboard();
   const client = useQueryClient();
   const [page, setPage] = useState(0);
   const [selection, setSelection] = useState(null);
@@ -74,7 +84,7 @@ export function QuotaValuePage() {
   const version = quota?.checked_at || quota?.fetched_at || quota?.history_fetched_at || "initial";
   const historyIdentity = `${identity}:${page}`;
   const selectedID = selection?.identity === historyIdentity ? selection.id : null;
-  const lastCurrent = useRef(null), lastHistory = useRef(null);
+  const lastCurrent = useRef(null), lastHistory = useRef(null), lastDetail = useRef(null);
   const detailPanel = useRef(null), detailTrigger = useRef(null);
   const focusedDetail = useRef(null);
   const enabled = Boolean(quota) && !quotaLoading && !quotaRefreshing && !scanning && !refreshing;
@@ -104,15 +114,22 @@ export function QuotaValuePage() {
     }
   }, [detail.data, selectedID, identity]);
   if (current.data?.status === "ready") lastCurrent.current = { identity, report: current.data };
-  if (history.data?.status === "ready") lastHistory.current = { identity, report: history.data };
+  if (history.data?.status === "ready") lastHistory.current = { identity: historyIdentity, report: history.data };
+  const detailIdentity = `${identity}:${selectedID}`;
+  if (detail.data) lastDetail.current = { identity: detailIdentity, report: detail.data };
   const report = current.data || (lastCurrent.current?.identity === identity ? lastCurrent.current.report : null);
-  const historyReport = history.data || (lastHistory.current?.identity === identity ? lastHistory.current.report : null);
+  const historyReport = history.data || (lastHistory.current?.identity === historyIdentity ? lastHistory.current.report : null);
+  const detailReport = detail.data || (lastDetail.current?.identity === detailIdentity ? lastDetail.current.report : null);
   const saved = Boolean(report?.saved || quota?.status !== "ready" || current.isError || actionError);
   const busy = quotaLoading || quotaRefreshing || scanning || refreshing;
+  const accountLoading = !quota && busy && !quotaError;
+  const currentLoading = !report && !current.isError && (accountLoading || busy || enabled && current.isPending);
+  const historyLoading = !historyReport && !history.isError && (accountLoading || busy || enabled && history.isPending);
+  const detailLoading = !detailReport && !detail.isError && (accountLoading || busy || enabled && detail.isPending);
   const basis = t(mode === "current" ? saved ? "Current-price conversion at that reading" : "Recalculate at current prices" : "Saved price estimate");
-  let status = busy ? t(scanning || refreshing ? "Scanning new logs and refreshing quota…" : "Reading account quota…") : !report && current.isPending ? t(quota?.status === "ready" ? "Calculating current cycle quota…" : "Reading the last saved conversion…")
+  let status = busy ? t(scanning || refreshing ? "Scanning new logs and refreshing quota…" : "Reading account quota…") : currentLoading ? t(quota?.status === "ready" ? "Calculating current cycle quota…" : "Reading the last saved conversion…")
     : report?.status === "ready" ? [saved && historyContext({ ...quota, ...report, status: quota?.status }), saved && t("Last saved conversion"), t("{plan} · quota read at {time} · {basis}", { plan: planLabel(report), time: valueTime(report.fetched_at), basis }), saved && t("Amounts and percentages remain as read")].filter(Boolean).join(" · ")
-      : systemMessage(report?.message) || current.error?.message || t("Quota unavailable");
+      : systemMessage(report?.message || quota?.message) || current.error?.message || quotaError?.message || t("Quota unavailable");
   if (quota?.archive_status === "error" || report?.archive_status === "error") status += ` · ${t("Raw quota readings could not be saved; amounts remain available.")}`;
   if (quota?.value_history_status === "error" || report?.value_history_status === "error") status += ` · ${t("Quota value history could not be saved; current amounts remain available.")}`;
   const displayedPage = historyReport?.status === "ready" ? Math.floor(historyReport.offset / 20) : page;
@@ -132,16 +149,17 @@ export function QuotaValuePage() {
   function closeDetail() { setSelection(null); detailTrigger.current?.focus(); }
   return <section className="page" data-page="quota-value">
     <section className="panel quota-value-intro">
-      <div className="panel-heading quota-value-heading"><div><p className="eyebrow">{t("QUOTA VALUE")}</p><div className="quota-value-window-title"><h2 id="quotaValueTitle">{t(saved ? "Last saved conversion" : "Current cycle conversion")}</h2><QuotaValueTooltip label={t(saved ? "Last saved conversion" : "Current cycle conversion")} paragraphs={[t("API-equivalent dollars are calculated from each window's cycle start through the quota reading time. Estimated start = next reset time − window duration."), status]} /></div></div><div className="quota-value-actions"><label className="price-mode-control"><span>{t("Pricing basis")}</span><select id="quotaValuePriceMode" value={mode} disabled={busy} onChange={event => { setSelection(null); setPage(0); setRange({ priceMode: event.target.value }); }}><option value="snapshot">{t("Saved price estimate")}</option><option value="current">{t("Recalculate at current prices")}</option></select></label><button type="button" id="refreshQuotaValueButton" className="button" disabled={busy} onClick={refresh}>{t(refreshing ? "Refreshing…" : quotaLoading || quotaRefreshing ? "Reading…" : "Refresh and convert")}</button></div></div>
+      <div className="panel-heading quota-value-heading"><div><p className="eyebrow">{t("QUOTA VALUE")}</p><div className="quota-value-window-title"><h2 id="quotaValueTitle">{t(saved ? "Last saved conversion" : "Current cycle conversion")}</h2><QuotaValueTooltip label={t(saved ? "Last saved conversion" : "Current cycle conversion")} paragraphs={[t("API-equivalent dollars are calculated from each window's cycle start through the quota reading time. Estimated start = next reset time − window duration."), status]} /></div></div><div className="quota-value-actions"><label className="price-mode-control"><span>{t("Pricing basis")}</span><select id="quotaValuePriceMode" value={mode} disabled={busy} onChange={event => { setSelection(null); setPage(0); setRange({ priceMode: event.target.value }); }}><option value="snapshot">{t("Saved price estimate")}</option><option value="current">{t("Recalculate at current prices")}</option></select></label><button type="button" id="refreshQuotaValueButton" className="button" disabled={busy} onClick={refresh}>{t(refreshing ? "Refreshing…" : quotaLoading || quotaRefreshing ? "Reading…" : "Refresh and convert")}{busy && <UsageSkeleton className="usage-inline-skeleton" style={{ display: "inline-block", width: 24, height: 8, marginLeft: 8, verticalAlign: "middle" }} />}</button></div></div>
       <HistoryNotice quota={quota} />
       <p id="quotaValueStatus" className="sr-only" role="status">{status}</p>
       {actionError && <ErrorNotice error={actionError} />}{current.error && report && <ErrorNotice error={current.error} />}
     </section>
-    <div id="quotaValueWindows" className="quota-value-windows" aria-busy={busy || current.isFetching}>{report?.windows?.length ? report.windows.map((window, index) => <QuotaValueCard key={`${window.limit_id}-${window.slot}-${index}`} window={window} report={report} saved={saved} />) : !current.isPending && <div className="panel"><EmptyState>{systemMessage(report?.message) || current.error?.message || t("No convertible percentage quota windows were returned.")}</EmptyState></div>}</div>
+    <div id="quotaValueWindows" className="quota-value-windows" aria-busy={busy || current.isFetching}>{currentLoading ? (quota?.windows?.length ? quota.windows : [null, null]).map((window, index) => <QuotaValueCardSkeleton key={index} window={window} />) : report?.windows?.length ? report.windows.map((window, index) => <QuotaValueCard key={`${window.limit_id}-${window.slot}-${index}`} window={window} report={report} saved={saved} />) : <div className="panel"><EmptyState>{systemMessage(report?.message || quota?.message) || current.error?.message || quotaError?.message || t("No convertible percentage quota windows were returned.")}</EmptyState></div>}</div>
+    <LoadingStatus loading={historyLoading}>{t("Reading saved account history…")}</LoadingStatus>
     <section id="quotaValueHistoryPanel" className="panel quota-value-history" aria-labelledby="quotaValueHistoryTitle" aria-busy={busy || history.isFetching}>
       <div className="panel-heading"><div><p className="eyebrow">{t("SAVED HISTORY")}</p><h2 id="quotaValueHistoryTitle">{t("Quota value history")}</h2></div></div>
       <ErrorNotice error={history.error} />
-      <div className="table-wrap quota-value-history-table-wrap"><table className="quota-value-history-table"><thead><tr>{historyHeaders.map(header => <th scope="col" key={header}>{t(header)}</th>)}</tr></thead><tbody id="quotaValueHistoryTable">{cycles.map(cycle => {
+      <div className="table-wrap quota-value-history-table-wrap"><table className="quota-value-history-table"><thead><tr>{historyHeaders.map(header => <th scope="col" key={header}>{t(header)}</th>)}</tr></thead><tbody id="quotaValueHistoryTable">{historyLoading ? <UsageTableSkeleton columns={historyHeaders.length} /> : cycles.map(cycle => {
         const selected = cycle.id === selectedID;
         const isCurrent = quota?.status === "ready" && cycle.is_current;
         return <tr key={cycle.id} className={selected ? "selected" : undefined}>
@@ -150,16 +168,16 @@ export function QuotaValuePage() {
           <td className="quota-value-primary">{percent(cycle.used_percent)}</td><td className="quota-value-primary">{valueMoney(cycle.total?.api_usd_known)}{cycle.total?.unknown_price_calls > 0 && <small className="unknown">{t("Known amounts only")}</small>}</td><td>{valueTime(cycle.fetched_at)}</td><td>{valueMoney(cycle.usd_per_percent)}</td><td>{valueMoney(cycle.full_quota_usd)}</td><td>{formatNumber(cycle.observation_count)}</td>
           <td><button type="button" className="button ghost" disabled={busy || history.isFetching} aria-controls="quotaValueHistoryDetail" aria-expanded={selected} onClick={event => { detailTrigger.current = event.currentTarget; setSelection(selected ? null : { identity: historyIdentity, id: cycle.id }); }}>{t(selected ? "Hide details" : "View readings")}</button></td>
         </tr>;
-      })}{!cycles.length && <tr><td colSpan="9" className="empty-state">{history.isPending ? t("Reading saved account history…") : systemMessage(historyReport?.message) || history.error?.message || t("No saved quota value history yet. Recording begins after reading a recognizable quota cycle.")}</td></tr>}</tbody></table></div>
-      <Pager page={displayedPage} pages={Math.ceil((historyReport?.total || 0) / 20)} disabled={busy || history.isFetching} onPage={next => { setSelection(null); setPage(next); }} />
+      })}{!historyLoading && !cycles.length && <tr><td colSpan="9" className="empty-state">{systemMessage(historyReport?.message || quota?.message) || history.error?.message || quotaError?.message || t("No saved quota value history yet. Recording begins after reading a recognizable quota cycle.")}</td></tr>}</tbody></table></div>
+      <Pager page={displayedPage} pages={Math.ceil((historyReport?.total || 0) / 20)} loading={historyLoading} disabled={busy || history.isFetching} onPage={next => { setSelection(null); setPage(next); }} />
     </section>
-    {selectedID != null && <section ref={detailPanel} id="quotaValueHistoryDetail" className="panel quota-value-history-detail" aria-labelledby="quotaValueHistoryDetailTitle" aria-busy={detail.isFetching} tabIndex={-1}>
-      <div className="panel-heading"><h2 id="quotaValueHistoryDetailTitle">{detail.data ? t("{window} · cycle reading details", { window: quotaWindowLabel(detail.data.cycle) }) : t("Cycle reading details")}</h2><button type="button" className="button ghost" onClick={closeDetail}>{t("Hide details")}</button></div>
-      <p id="quotaValueHistoryDetailStatus" className="fine-print" role="status">{detail.isPending ? t("Reading saved cycle snapshots…") : detail.data ? t("{context} · cycle start {start} · scheduled reset {reset} · {count} saved readings · {cycle}", { context: historyContext({ ...quota, ...detail.data, status: quota?.status }), start: valueTime(detail.data.cycle.cycle_start_at), reset: valueTime(detail.data.cycle.resets_at), count: formatNumber(detail.data.observations.length), cycle: t(quota?.status === "ready" && detail.data.cycle.is_current ? "Current cycle" : "Historical cycle; its last reading is not final usage at reset") }) : ""}</p>
+    {selectedID != null && <><LoadingStatus loading={detailLoading}>{t("Reading saved cycle snapshots…")}</LoadingStatus><section ref={detailPanel} id="quotaValueHistoryDetail" className="panel quota-value-history-detail" aria-labelledby="quotaValueHistoryDetailTitle" aria-busy={busy || detail.isFetching} tabIndex={-1}>
+      <div className="panel-heading"><h2 id="quotaValueHistoryDetailTitle">{detailReport ? t("{window} · cycle reading details", { window: quotaWindowLabel(detailReport.cycle) }) : t("Cycle reading details")}</h2><button type="button" className="button ghost" onClick={closeDetail}>{t("Hide details")}</button></div>
+      <p id="quotaValueHistoryDetailStatus" className="fine-print" role="status">{detailLoading ? <UsageSkeleton className="usage-line-skeleton" /> : detailReport ? t("{context} · cycle start {start} · scheduled reset {reset} · {count} saved readings · {cycle}", { context: historyContext({ ...quota, ...detailReport, status: quota?.status }), start: valueTime(detailReport.cycle.cycle_start_at), reset: valueTime(detailReport.cycle.resets_at), count: formatNumber(detailReport.observations.length), cycle: t(quota?.status === "ready" && detailReport.cycle.is_current ? "Current cycle" : "Historical cycle; its last reading is not final usage at reset") }) : ""}</p>
       <ErrorNotice error={detail.error} />
       <p className="fine-print">{t("Readings show saved amounts in reverse chronological order. Values per 1%, for 100%, and for remaining quota use that reading's proportions.")}</p>
-      <div className="table-wrap quota-value-observations-wrap"><table><thead><tr>{observationHeaders.map(header => <th scope="col" key={header}>{t(header)}</th>)}</tr></thead><tbody id="quotaValueObservationTable">{(detail.data?.observations || []).map((row, index) => <tr key={`${row.fetched_at}-${index}`}><td>{valueTime(row.fetched_at)}</td><td>{percent(row.used_percent)}</td><td>{valueMoney(row.total?.api_usd_known)}</td><td>{valueMoney(row.usd_per_percent)}</td><td>{valueMoney(row.full_quota_usd)}</td><td>{valueMoney(row.remaining_quota_usd)}</td><td className="quota-value-observation-note">{observationNotes(row) || "—"}</td></tr>)}{detail.data && !detail.data.observations.length && <tr><td colSpan="7" className="empty-state">{t("No snapshots are available for this cycle.")}</td></tr>}</tbody></table></div>
-    </section>}
+      <div className="table-wrap quota-value-observations-wrap"><table><thead><tr>{observationHeaders.map(header => <th scope="col" key={header}>{t(header)}</th>)}</tr></thead><tbody id="quotaValueObservationTable">{detailLoading ? <UsageTableSkeleton columns={observationHeaders.length} /> : (detailReport?.observations || []).map((row, index) => <tr key={`${row.fetched_at}-${index}`}><td>{valueTime(row.fetched_at)}</td><td>{percent(row.used_percent)}</td><td>{valueMoney(row.total?.api_usd_known)}</td><td>{valueMoney(row.usd_per_percent)}</td><td>{valueMoney(row.full_quota_usd)}</td><td>{valueMoney(row.remaining_quota_usd)}</td><td className="quota-value-observation-note">{observationNotes(row) || "—"}</td></tr>)}{!detailLoading && detailReport && !detailReport.observations.length && <tr><td colSpan="7" className="empty-state">{t("No snapshots are available for this cycle.")}</td></tr>}</tbody></table></div>
+    </section></>}
   </section>;
 }
 

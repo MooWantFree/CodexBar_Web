@@ -38,6 +38,7 @@ export function DashboardProvider({config, children}) {
   const quotaMutation = useMutation({
     onMutate: () => client.cancelQueries({predicate: query => query.queryKey[0] === 'quota' || String(query.queryKey[0]).startsWith('quota-value')}),
     mutationFn: () => apiPost('/api/quota/refresh'),
+    onError: () => { void client.invalidateQueries({predicate: query => query.state.data === undefined && (query.queryKey[0] === 'quota' || String(query.queryKey[0]).startsWith('quota-value'))}); },
     onSuccess: async snapshot => {
       client.setQueryData(['quota'], snapshot);
       await client.invalidateQueries({predicate: query => query.queryKey[0] !== 'quota'});
@@ -46,6 +47,7 @@ export function DashboardProvider({config, children}) {
   const scanMutation = useMutation({
     onMutate: () => client.cancelQueries({predicate: query => query.queryKey[0] !== 'quota'}),
     mutationFn: () => apiPost('/api/scan'),
+    onError: () => { void client.invalidateQueries({predicate: query => query.state.data === undefined && query.queryKey[0] !== 'quota'}); },
     onSuccess: () => client.invalidateQueries({predicate: query => query.queryKey[0] !== 'quota'}),
   });
   const settingsMutation = useMutation({

@@ -4,6 +4,7 @@ import {useDashboard} from '../context/DashboardContext';
 import {apiGet, apiPost} from '../lib/api';
 import {t, useLanguagePreference, setLanguagePreference} from '../lib/i18n';
 import {ErrorNotice} from '../components/Shared';
+import {LoadingStatus, UsageSkeleton} from '../components/UsageSkeleton';
 import {PricingPage} from './pricing/PricingPage';
 import './settingsMessages';
 
@@ -50,20 +51,23 @@ export default function SettingsPage() {
     } catch (failure) { setError(failure); }
   }
   const busy = settingsSaving || scanning || quotaRefreshing || selecting;
-  return <section className="page settings-page" data-page="settings">
+  const loadingDirectory = settings.isPending && !directory && !dirty;
+  return <><LoadingStatus loading={settings.isPending}/><section className="page settings-page" data-page="settings">
     <section className="panel settings-panel" aria-labelledby="settingsHeading">
       <div className="panel-heading"><div><p className="eyebrow">{t('APPLICATION SETTINGS')}</p><h2 id="settingsHeading">{t('日志与界面')}</h2></div></div>
       <form className="settings-form" onSubmit={save}>
         <div className="settings-field">
           <label htmlFor="codexHomeInput">{t('Codex 日志目录')}</label>
           <div className="settings-directory-control">
-            <input id="codexHomeInput" type="text" autoComplete="off" spellCheck="false" value={directory} disabled={busy} aria-describedby="codexHomeHint" onChange={event => { setDirectory(event.target.value); setDirty(true); setError(null); setSaved(false); }} />
-            <button type="button" className="button" disabled={busy} onClick={selectFolder}>{t(selecting ? '正在选择…' : '选择文件夹')}</button>
+            <div className="settings-directory-field"><input id="codexHomeInput" type="text" autoComplete="off" spellCheck="false" value={directory} disabled={busy || loadingDirectory} aria-describedby="codexHomeHint" onChange={event => { setDirectory(event.target.value); setDirty(true); setError(null); setSaved(false); }} />
+              {loadingDirectory && <UsageSkeleton className="usage-settings-directory"/>}</div>
+            <button type="button" className="button" disabled={busy || loadingDirectory} onClick={selectFolder}>{t(selecting ? '正在选择…' : '选择文件夹')}{selecting && <UsageSkeleton className="usage-inline-skeleton"/>}</button>
           </div>
           <p id="codexHomeHint" className="fine-print">{t('手动填写或选择本机文件夹，目录需包含 sessions、archived_sessions 或 logs_2.sqlite。点击保存后自动扫描，已有历史记录继续保留。')}</p>
           {settings.data?.codex_home_exists === false && <p className="fine-print unknown">{t('当前日志目录不存在，请选择有效目录。')}</p>}
+          {settings.isPending && <UsageSkeleton className="usage-line-skeleton"/>}
         </div>
-        <div className="settings-actions"><button type="submit" className="button primary" disabled={busy}>{t(settingsSaving ? '正在保存并扫描…' : '保存并扫描')}</button><span role="status" className="fine-print">{saved && t('日志目录已保存。')}</span></div>
+        <div className="settings-actions"><button type="submit" className="button primary" disabled={busy || loadingDirectory}>{t(settingsSaving ? '正在保存并扫描…' : '保存并扫描')}{settingsSaving && <UsageSkeleton className="usage-inline-skeleton"/>}</button><span role="status" className="fine-print">{saved && t('日志目录已保存。')}</span></div>
         <ErrorNotice error={error || settings.error} />
       </form>
       <div className="settings-field settings-language">
@@ -75,5 +79,5 @@ export default function SettingsPage() {
       </div>
     </section>
     <PricingPage />
-  </section>;
+  </section></>;
 }

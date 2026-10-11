@@ -7,6 +7,7 @@ import {locale, t} from '../../lib/i18n';
 import {formatNumber, formatDateTime, modelName} from '../../lib/format';
 import {EmptyState, ErrorNotice, Pager} from '../../components/Shared';
 import {CostValue} from '../../components/CostValue';
+import {LoadingStatus, UsageSkeleton, UsageTableSkeleton} from '../../components/UsageSkeleton';
 import {PAGE_SIZE, EMPTY_ROWS, numeric, fixed, sessionTitle, projectName, sortUsageRows, SortableHead, TrendPair, scrollToDetail, FAST_TITLE} from './UsageShared';
 
 const sessionModels = row => Array.isArray(row.model_entries) ? row.model_entries.map(modelName) : row.models || [];
@@ -50,30 +51,34 @@ function SnapshotBadge({snapshot}) {
   return <span title={detail} className={`coverage ${snapshot?.inferred ? 'partial' : ''}`}>{provenance}</span>;
 }
 
-function SessionDetail({selection, detailRef}) {
+function SessionDetail({selection, detailRef, awaitingSelection = false}) {
   const {rangeKey, queryString} = useDashboard();
-  const [page, setPage] = useState(0);
+  const pageIdentity = JSON.stringify([rangeKey, selection?.key, selection?.scope]);
+  const [pagination, setPagination] = useState(() => ({identity: pageIdentity, page: 0}));
+  const page = pagination.identity === pageIdentity ? pagination.page : 0;
+  const setPage = next => setPagination({identity: pageIdentity, page: next});
   const [sort, setSort] = useState({field: 'api_usd_known', direction: 'descending'});
-  useEffect(() => { setPage(0); }, [rangeKey, selection?.key, selection?.scope]);
+  useEffect(() => { setPagination(previous => previous.identity === pageIdentity ? previous : {identity: pageIdentity, page: 0}); }, [pageIdentity]);
   const query = useQuery({queryKey: ['session-detail', rangeKey, selection?.key, selection?.scope, page, sort.field, sort.direction], enabled: Boolean(selection?.key),
     queryFn: ({signal}) => apiGet(`/api/sessions/detail?${queryString({session: selection.key, scope: selection.scope, offset: page * PAGE_SIZE, limit: PAGE_SIZE, sort_by: sort.field, sort_direction: sort.direction})}`, {signal})});
+  const loading = awaitingSelection || (Boolean(selection?.key) && query.isPending);
   const report = query.data, total = report?.total;
   const pages = Math.max(1, Math.ceil(numeric(report?.request_count) / PAGE_SIZE));
-  const summary = total ? <>{t('{calls} 次调用 · {tokens} Token', {calls: formatNumber(total.calls), tokens: formatNumber(total.total_tokens)})}
+  const summary = loading ? <span className="usage-summary-skeleton">{[0, 1, 2, 3, 4].map(index => <UsageSkeleton key={index} className="usage-inline-skeleton"/>)}</span> : total ? <>{t('{calls} 次调用 · {tokens} Token', {calls: formatNumber(total.calls), tokens: formatNumber(total.total_tokens)})}
     {' · '}{t('API 等价')} <CostValue row={total} models={report.models}/>
     {' · '}{t('Fast API 加价')} <CostValue row={total} kind="fast" models={report.models}/>
     {' · '}{t('价格覆盖 {percent}%', {percent: fixed(total.price_coverage_percent)})}
-    {' · '}{t('档位覆盖 {percent}%', {percent: fixed(total.tier_coverage_percent)})}</> : t(query.isPending && selection ? '正在读取会话调用…' : '选择一个会话查看每次调用。');
-  return <section id="sessionDetail" className="panel table-panel" ref={detailRef} tabIndex={-1} aria-busy={query.isFetching}>
-    <div className="panel-heading"><div><p className="eyebrow">{t('会话明细标题')}</p><h2 id="sessionDetailTitle">{report ? t('{title} · {scope}', {title: sessionTitle(report.session), scope: t(selection.scope === 'tree' && report.session.has_children ? '会话合计' : '自身用量')}) : t('会话明细')}</h2><p id="sessionDetailSummary" className="fine-print">{summary}</p></div></div>
-    <ErrorNotice error={query.error}/><TrendPair report={report} nested prefix="session"/>
+    {' · '}{t('档位覆盖 {percent}%', {percent: fixed(total.tier_coverage_percent)})}</> : t('选择一个会话查看每次调用。');
+  return <><LoadingStatus loading={loading && !awaitingSelection}/><section id="sessionDetail" className="panel table-panel" ref={detailRef} tabIndex={-1} aria-busy={awaitingSelection || query.isFetching}>
+    <div className="panel-heading"><div><p className="eyebrow">{t('会话明细标题')}</p><h2 id="sessionDetailTitle">{loading ? <UsageSkeleton className="usage-heading-skeleton"/> : report ? t('{title} · {scope}', {title: sessionTitle(report.session), scope: t(selection.scope === 'tree' && report.session.has_children ? '会话合计' : '自身用量')}) : t('会话明细')}</h2><p id="sessionDetailSummary" className="fine-print">{summary}</p></div></div>
+    <ErrorNotice error={query.error}/><TrendPair report={report} nested prefix="session" loading={loading}/>
     <div className="table-wrap request-table-wrap"><table><SortableHead columns={REQUEST_COLUMNS} sort={sort} onSort={next => { setSort(next); setPage(0); }}/><tbody id="requestTable">
-      {total && <tr className="request-total"><td>{t('总计')}</td><td>—</td><td>—</td><td>{formatNumber(total.input_tokens)}</td><td>{formatNumber(total.cached_input_tokens)}</td><td>{formatNumber(total.output_tokens)}</td><td><CostValue row={total} models={report.models}/></td><td><CostValue row={total} kind="fast" models={report.models}/></td><td>—</td></tr>}
+      {loading ? <UsageTableSkeleton columns={REQUEST_COLUMNS.length} rows={5}/> : <>{total && <tr className="request-total"><td>{t('总计')}</td><td>—</td><td>—</td><td>{formatNumber(total.input_tokens)}</td><td>{formatNumber(total.cached_input_tokens)}</td><td>{formatNumber(total.output_tokens)}</td><td><CostValue row={total} models={report.models}/></td><td><CostValue row={total} kind="fast" models={report.models}/></td><td>—</td></tr>}
       {(report?.requests || []).map(row => <tr key={row.key}><td>{formatDateTime(row.timestamp, {hour12: false})}</td><td>{Object.hasOwn(row, 'model_id') ? modelName({key: row.model_id, display_name: row.model}) : row.model}</td><td>{row.service_tier === 'priority' ? 'Fast' : row.service_tier === 'standard' ? 'Standard' : t('未知')}</td>
         <td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td><td><CostValue row={row} unknownOnly/></td><td><CostValue row={row} kind="fast"/></td><td><SnapshotBadge snapshot={row.price_snapshot}/></td>
-      </tr>)}{!report?.requests?.length && <tr><td colSpan={9}><EmptyState>{t('暂无调用')}</EmptyState></td></tr>}
-    </tbody></table></div><Pager page={page} pages={pages} onPage={setPage} disabled={query.isFetching || !report}/>
-  </section>;
+      </tr>)}{!report?.requests?.length && <tr><td colSpan={9}><EmptyState>{t('暂无调用')}</EmptyState></td></tr>}</>}
+    </tbody></table></div><Pager page={page} pages={pages} onPage={setPage} disabled={query.isFetching || !report} loading={loading}/>
+  </section></>;
 }
 
 export default function SessionsPage() {
@@ -86,6 +91,7 @@ export default function SessionsPage() {
   const [page, setPage] = useState(0);
   const detailRef = useRef(null);
   const query = useQuery({queryKey: ['sessions', rangeKey], queryFn: ({signal}) => apiGet(`/api/sessions?${queryString()}`, {signal})});
+  const loading = query.isPending;
   const sessions = query.data?.sessions || EMPTY_ROWS;
   const rows = useMemo(() => sortUsageRows(sessions.filter(row => sessionMatches(row, search)), sort), [sessions, search, sort, locale]);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -120,21 +126,21 @@ export default function SessionsPage() {
   };
   const toggle = key => setExpanded(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const ranking = {api_usd_known: 'cost', total_tokens: 'tokens', fast_surcharge_usd: 'fast'}[sort.field] || '';
-  return <section className="page" data-page="sessions" aria-busy={query.isFetching}>
+  return <><LoadingStatus loading={loading}/><section className="page" data-page="sessions">
     <ErrorNotice error={query.error}/>
-    <section className="panel table-panel"><div className="panel-heading session-heading"><div><p className="eyebrow">{t('会话排行')}</p><h2>{t('会话用量排行')}</h2>
-      <small id="sessionCount" className="fine-print">{t('{count} 个会话 · 父会话汇总自身及所有子会话 · 用量均在当前筛选区间内', {count: formatNumber(rows.length)})}</small></div>
+    <section className="panel table-panel" aria-busy={query.isFetching}><div className="panel-heading session-heading"><div><p className="eyebrow">{t('会话排行')}</p><h2>{t('会话用量排行')}</h2>
+      <small id="sessionCount" className="fine-print">{loading ? <UsageSkeleton className="usage-line-skeleton"/> : t('{count} 个会话 · 父会话汇总自身及所有子会话 · 用量均在当前筛选区间内', {count: formatNumber(rows.length)})}</small></div>
       <div className="session-tools"><label>{t('搜索会话')}<input id="sessionSearch" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t('标题、项目或会话 ID')}/></label>
         <label>{t('排序')}<select id="sessionSort" value={ranking} onChange={event => setSort({field: {cost: 'api_usd_known', tokens: 'total_tokens', fast: 'fast_surcharge_usd'}[event.target.value], direction: 'descending'})}>
           <option value="cost">{t('API 等价成本')}</option><option value="tokens">{t('总 Token')}</option><option value="fast">{t('Fast API 加价')}</option><option value="" disabled>{t('按表头排序')}</option>
         </select></label></div>
     </div><p className="fine-print">{t('已扫描的调用、Token 和价格快照保存在本地数据库；源日志被清空后仍可查看。新日志需要在清空前完成扫描。')}</p>
       <div className="table-wrap"><table><SortableHead columns={SESSION_COLUMNS} sort={sort} onSort={setSort}/><tbody id="sessionTable">
-        {rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(row => <Fragment key={row.key}>
+        {loading ? <UsageTableSkeleton columns={SESSION_COLUMNS.length}/> : rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(row => <Fragment key={row.key}>
           <SessionRow row={row} selection={selection} expanded={expanded.has(row.key)} onExpand={toggle} onSelect={select}/>
           {row.has_children && expanded.has(row.key) && row.members.map(member => <SessionRow key={`${member.key}:self`} row={member} group={row} selection={selection} onSelect={select}/>)}</Fragment>)}
-        {!rows.length && <tr><td colSpan={8}><EmptyState>{t(query.isPending ? '正在汇总用量…' : '当前范围没有匹配的会话。')}</EmptyState></td></tr>}
-      </tbody></table></div><Pager page={currentPage} pages={pages} onPage={setPage}/>
-    </section><SessionDetail selection={selection} detailRef={detailRef}/>
-  </section>;
+        {!loading && !rows.length && <tr><td colSpan={8}><EmptyState>{t('当前范围没有匹配的会话。')}</EmptyState></td></tr>}
+      </tbody></table></div><Pager page={currentPage} pages={pages} onPage={setPage} loading={loading}/>
+    </section><SessionDetail selection={selection} detailRef={detailRef} awaitingSelection={(loading || sessions.length > 0) && !selection}/>
+  </section></>;
 }

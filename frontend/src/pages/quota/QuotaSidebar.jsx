@@ -3,6 +3,7 @@ import { useDashboard } from "../../context/DashboardContext";
 import { t } from "../../lib/i18n";
 import { systemMessage } from "../../lib/systemMessages";
 import { formatDateTime, formatNumber, quotaWindowLabel } from "../../lib/format";
+import { LoadingStatus, UsageSkeleton } from "../../components/UsageSkeleton";
 import { planLabel, valueTime, percent } from "./QuotaShared";
 import "../quotaMessages";
 
@@ -26,15 +27,16 @@ export function QuotaSidebar() {
   ].filter(Boolean) : [systemMessage(quota?.message) || quotaError?.message || t("Quota unavailable")];
   const resetLabel = t("Available quota resets: {count}", { count: formatNumber(count) });
   const busy = quotaLoading || quotaRefreshing || scanning;
+  const loading = !quota && busy && !quotaError;
   function showCredits() {
     dialog.current?.showModal?.();
     setOpen(true);
   }
   function closeCredits() { dialog.current?.close?.(); setOpen(false); }
-  return <section id="quotaPanel" className="sidebar-quota" aria-labelledby="quotaTitle" aria-busy={busy}>
-    <div className="quota-heading"><h2 id="quotaTitle">{t("Current account")}</h2><span id="quotaPlan" className={`quota-plan${!quota && quotaLoading ? " quota-skeleton" : ""}`} title={ready ? planLabel(quota) : t("Live quota unavailable")}>{!quota && quotaLoading ? "" : ready ? planLabel(quota) : t("Live quota unavailable")}</span></div>
+  return <><LoadingStatus loading={loading}>{t("Reading account quota…")}</LoadingStatus><section id="quotaPanel" className="sidebar-quota" aria-labelledby="quotaTitle" aria-busy={busy}>
+    <div className="quota-heading"><h2 id="quotaTitle">{t("Current account")}</h2><span id="quotaPlan" className={`quota-plan${loading ? " quota-skeleton" : ""}`} aria-hidden={loading || undefined} title={loading ? undefined : ready ? planLabel(quota) : t("Live quota unavailable")}>{loading ? "" : ready ? planLabel(quota) : t("Live quota unavailable")}</span></div>
     <div id="quotaWindows" className="quota-grid">
-      {!quota && quotaLoading ? <div className="quota-skeleton-window" aria-label={t("Reading account quota…")}><div className="quota-window-heading"><span className="quota-skeleton skeleton-label" /><span className="quota-skeleton skeleton-value" /></div><span className="quota-skeleton skeleton-bar" /><span className="quota-skeleton skeleton-reset" /></div>
+      {loading ? [0, 1].map(index => <div className="quota-skeleton-window" key={index} aria-hidden="true"><div className="quota-window-heading"><span className="quota-skeleton skeleton-label" /><span className="quota-skeleton skeleton-value" /></div><span className="quota-skeleton skeleton-bar" /><span className="quota-skeleton skeleton-reset" /></div>)
         : windows.length ? windows.map((window, index) => {
           const remaining = window.remaining_percent;
           const label = quotaWindowLabel(window);
@@ -46,7 +48,7 @@ export function QuotaSidebar() {
           </article>;
         }) : <div className="quota-empty">{t("Quota unavailable")}</div>}
     </div>
-    {(notices.length > 0 || count > 0) && <p id="quotaStatus" className={`fine-print${quota?.status === "error" ? " error-text" : ""}`} aria-live="polite" title={[count > 0 && resetLabel, ...notices].filter(Boolean).join(" · ")}>
+    {loading ? <p id="quotaStatus" className="fine-print" aria-hidden="true"><UsageSkeleton className="usage-line-skeleton" /></p> : (notices.length > 0 || count > 0) && <p id="quotaStatus" className={`fine-print${quota?.status === "error" ? " error-text" : ""}`} aria-live="polite" title={[count > 0 && resetLabel, ...notices].filter(Boolean).join(" · ")}>
       {count > 0 && <><button type="button" className={`quota-reset-trigger${urgent ? " expiring" : ""}`} aria-controls="quotaResetPopover" aria-haspopup="dialog" aria-expanded={open} onClick={showCredits}>{resetLabel}</button>{notices.length > 0 ? " · " : ""}</>}{notices.join(" · ")}
     </p>}
     <dialog ref={dialog} id="quotaResetPopover" className="quota-reset-popover" aria-label={t("Available reset expiration dates")} onClose={() => setOpen(false)} onCancel={() => setOpen(false)} onClick={event => {
@@ -58,7 +60,7 @@ export function QuotaSidebar() {
       {credits.length > 0 && <ul>{credits.map((credit, index) => <li key={`${credit.title}-${index}`}><strong>{credit.title || t("Quota reset {index}", { index: formatNumber(index + 1) })}</strong><span>{credit.expires_at == null ? t(credit.expiry_known ? "No expiration date" : "Expiration date unavailable") : t("Expires: {time}", { time: formatDateTime(credit.expires_at * 1000, { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }) })}</span></li>)}</ul>}
       {count > credits.length ? <p>{t("Expiration dates for {count} resets are unavailable.", { count: formatNumber(count - credits.length) })}</p> : !quota?.reset_credits_details_available && <p>{t("Reset expiration dates are unavailable.")}</p>}
     </dialog>
-    <button id="refreshQuotaButton" type="button" className={`button quota-refresh${urgent ? " expiring" : ""}`} disabled={busy} onClick={() => refreshQuota().catch(() => {})}>{t(busy ? "Reading…" : "Refresh quota")}</button>
-  </section>;
+    <button id="refreshQuotaButton" type="button" className={`button quota-refresh${urgent ? " expiring" : ""}`} disabled={busy} onClick={() => refreshQuota().catch(() => {})}>{t(busy ? "Reading…" : "Refresh quota")}{busy && <UsageSkeleton className="usage-inline-skeleton" style={{ display: "inline-block", width: 24, height: 8, marginLeft: 8, verticalAlign: "middle" }} />}</button>
+  </section></>;
 }
 

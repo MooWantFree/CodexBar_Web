@@ -5,6 +5,7 @@ import {apiGet} from '../../lib/api';
 import {t} from '../../lib/i18n';
 import {formatNumber, money} from '../../lib/format';
 import {StackedChart} from '../../components/Shared';
+import {UsageChartSkeleton} from '../../components/UsageSkeleton';
 import '../usageMessages';
 
 export const PAGE_SIZE = 50;
@@ -81,7 +82,7 @@ export function useSynchronizedCharts(ref, rows) {
   }, [ref, rows]);
 }
 
-export function TrendPair({report, nested = false, prefix = ''}) {
+export function TrendPair({report, nested = false, prefix = '', loading = false}) {
   const {range} = useDashboard();
   const rows = report?.[range.grain] || EMPTY_ROWS;
   const ref = useRef(null);
@@ -93,7 +94,7 @@ export function TrendPair({report, nested = false, prefix = ''}) {
       return <article key={metric} className={nested ? undefined : 'panel chart-panel'}>
         {nested ? <h3>{title}</h3> : <div className="panel-heading"><div><p className="eyebrow">{t(index === 0 ? 'TOKEN 趋势' : '成本趋势')}</p><h2>{title}</h2></div></div>}
         <div id={prefix ? `${prefix}${index ? 'CostChart' : 'TokenChart'}` : index ? 'costChart' : 'tokenChart'} className={`daily-chart ${range.grain === 'hourly' ? 'hourly-chart' : ''}`}>
-          <StackedChart rows={rows} metric={metric}/>
+          {loading ? <UsageChartSkeleton/> : <StackedChart rows={rows} metric={metric}/>}
         </div>
       </article>;
     })}

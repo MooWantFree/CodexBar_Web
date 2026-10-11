@@ -53,7 +53,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('React analytics pages', () => {
   it('renders all overview KPIs, model breakdown, unknown costs and model charts', async () => {
     mount(OverviewPage, '/overview', () => ({total: {...total, unknown_price_calls: 1, unknown_credit_calls: 1}, models: [{...day.models[0], unknown_price_calls: 1}], daily: [day], hourly: [hour]}));
-    await screen.findByRole('heading', {name: 'Usage by model'});
+    await waitFor(() => expect(document.getElementById('costKpi').textContent).toBe('$8.00'));
     expect(document.querySelectorAll('.kpi-card')).toHaveLength(5);
     expect(document.getElementById('costKpi').textContent).toBe('$8.00');
     expect(document.getElementById('costKpi').closest('article').textContent).not.toContain('+ Unknown');

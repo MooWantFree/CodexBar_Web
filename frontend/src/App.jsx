@@ -6,6 +6,7 @@ import {t, addMessages, useLocale} from './lib/i18n';
 import {formatNumber} from './lib/format';
 import DateControls from './components/DateControls';
 import {ErrorNotice} from './components/Shared';
+import {UsageSkeleton} from './components/UsageSkeleton';
 import {OverviewPage, DailyPage, ProjectsPage, SessionsPage} from './pages/UsagePages';
 import {QuotaSidebar, ResetsPage, QuotaValuePage} from './pages/QuotaPages';
 import SettingsPage from './pages/SettingsPage';
@@ -98,7 +99,7 @@ export default function App() {
     <button className="sidebar-backdrop" hidden={!menuOpen} aria-label={t('关闭导航')} onClick={() => setMenuOpen(false)} />
     <aside id="sidebar" className="sidebar" aria-label={t('主导航')}><div className="brand"><span className="brand-mark">C</span><div><strong>Codex Report</strong><small>{t('LOCAL ANALYTICS')}</small></div></div>
       <nav className="nav-list" aria-label={t('导航')}>{routes.map(item => <div className="nav-item" key={item.path}>{item.path === '/settings' && <div className="nav-divider" role="separator" />}<NavLink to={`${item.path}?${queryString()}`}><span aria-hidden="true">{item.icon}</span>{t(item.title)}</NavLink></div>)}</nav><div className="sidebar-foot"><QuotaSidebar /></div></aside>
-    <main className="app-main"><header className="topbar"><div><p className="eyebrow">{t(route.eyebrow)}</p><h1>{t(route.title)}</h1><p className="subtitle">{t(route.subtitle)}</p></div><div className="header-actions"><span className="log-directory-chip" title={codexHome} aria-label={`${t('日志目录')}：${codexHome}`}><span className="dot" /><span className="log-directory-label">{t('日志目录')}</span><code>{codexHome}</code></span>{route.path !== '/resets' && <button className="button primary" disabled={scanning} onClick={() => scan().catch(() => {})}>{t(scanning ? '扫描中…' : '扫描新日志')}</button>}</div></header>
+    <main className="app-main"><header className="topbar"><div><p className="eyebrow">{t(route.eyebrow)}</p><h1>{t(route.title)}</h1><p className="subtitle">{t(route.subtitle)}</p></div><div className="header-actions"><span className="log-directory-chip" title={codexHome} aria-label={`${t('日志目录')}：${codexHome}`}><span className="dot" /><span className="log-directory-label">{t('日志目录')}</span><code>{codexHome}</code></span>{route.path !== '/resets' && <button className="button primary" disabled={scanning} onClick={() => scan().catch(() => {})}>{t(scanning ? '扫描中…' : '扫描新日志')}{scanning && <UsageSkeleton className="usage-inline-skeleton"/>}</button>}</div></header>
       {showRange && <section className="control-panel panel"><DateControls key={location.key} /><AnalysisControls /></section>}<ErrorNotice error={scanError} />
       <PageErrorBoundary key={route.path}><Routes><Route path="/" element={<Navigate to={`/overview${location.search}`} replace />} /><Route path="/pricing" element={<Navigate to={`/settings${location.search}`} replace />} />{routes.map(item => <Route key={item.path} path={item.path} element={<item.component />} />)}<Route path="*" element={<Navigate to={`/overview${location.search}`} replace />} /></Routes></PageErrorBoundary>
     </main>

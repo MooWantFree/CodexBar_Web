@@ -6,6 +6,7 @@ import { systemMessage } from "../../lib/systemMessages";
 import { formatDateTime, formatNumber, quotaWindowLabel } from "../../lib/format";
 import { rangeQuery } from "../../lib/range";
 import { EmptyState } from "../../components/Shared";
+import { UsageSkeleton } from "../../components/UsageSkeleton";
 import { HistoryNotice, historyAvailable, historyContext } from "./QuotaShared";
 import "../quotaMessages";
 
@@ -38,6 +39,7 @@ export function ResetsPage() {
   const selected = selection && selection.scope === scope && (selection.key === "today" || resets.some(record => record.key === selection.key)) ? selection : null;
   const records = [{ key: "today", stamp: selected?.key === "today" ? selected.stamp : Date.now() - 2 * 60 * 1000, labels: new Set([t("Today")]), methods: new Set(), today: true }, ...resets];
   const busy = quotaLoading || quotaRefreshing || scanning;
+  const loading = !quota && busy && !quotaError;
   function select(record) {
     if (!selected || selected.key === record.key) { setSelection(selected?.key === record.key ? null : { ...record, scope }); return; }
     const [start, end] = [selected, record].sort((a, b) => a.stamp - b.stamp);
@@ -53,12 +55,12 @@ export function ResetsPage() {
     : systemMessage(quota?.message) || quotaError?.message || t("No local account reset records are available.");
   if (quota?.reset_history_status === "error") status += ` · ${t("The latest reset records could not be read or saved.")}`;
   return <section className="page" data-page="resets"><section className="panel reset-panel">
-    <div className="panel-heading"><div><p className="eyebrow">{t("RESET HISTORY")}</p><h2>{t("Quota reset records")}</h2></div><button id="refreshResetsButton" type="button" className="button" disabled={busy} onClick={() => refreshQuota().catch(() => {})}>{t(busy ? "Reading…" : "Refresh records")}</button></div>
+    <div className="panel-heading"><div><p className="eyebrow">{t("RESET HISTORY")}</p><h2>{t("Quota reset records")}</h2></div><button id="refreshResetsButton" type="button" className="button" disabled={busy} onClick={() => refreshQuota().catch(() => {})}>{t(busy ? "Reading…" : "Refresh records")}{busy && <UsageSkeleton className="usage-inline-skeleton" style={{ display: "inline-block", width: 24, height: 8, marginLeft: 8, verticalAlign: "middle" }} />}</button></div>
     <HistoryNotice quota={quota} />
     <p className="fine-print">{t("Select any two reset times to review usage between them. Times use {timezone}; estimated times are marked separately.", { timezone })}</p>
     <div className="reset-selection" aria-live="polite"><span id="resetSelectionStatus">{selected ? t("Selected {time}. Choose another time.", { time: formatDateTime(selected.stamp) }) : t("Choose the first time")}</span><button type="button" className="button ghost" disabled={!selected} onClick={() => setSelection(null)}>{t("Cancel selection")}</button></div>
     <p id="resetHistoryStatus" className="fine-print" role="status">{status}</p>
-    <div id="resetRecords" className="reset-records" aria-busy={busy}>{records.map(record => {
+    <div id="resetRecords" className="reset-records" aria-busy={busy}>{loading ? Array.from({ length: 4 }, (_, index) => <div className="reset-record-skeleton" key={index} aria-hidden="true"><span className="quota-skeleton" /><span className="quota-skeleton" /></div>) : records.map(record => {
       const parts = localRangeParts(record.stamp, timezone);
       const labels = [...record.labels].join(" · ");
       const picked = selected?.key === record.key;
@@ -67,7 +69,7 @@ export function ResetsPage() {
       return <button type="button" key={record.key} className={`reset-record${picked ? " selected" : ""}`} aria-pressed={picked} aria-label={t("Select time, {time}, {labels}, {badge}", { time: `${parts.date} ${parts.clock}`, labels, badge })} onClick={() => select(record)} disabled={busy}>
         <span className="reset-record-check" aria-hidden="true">{picked ? "✓" : "○"}</span><span className="reset-record-time"><strong>{parts.date}</strong><time dateTime={new Date(record.stamp).toISOString()}>{parts.clock}</time></span><span className="reset-record-detail"><strong>{labels}</strong><small>{description}</small></span><span className={`reset-badge${record.estimated ? " estimated" : ""}`}>{badge}</span><span className="reset-record-action">{t(picked ? "Selected" : "Select")}</span>
       </button>;
-    })}{!resets.length && <EmptyState>{t("No reset records yet. Reading an active quota window will show its estimated cycle start.")}</EmptyState>}</div>
+    })}{!loading && !resets.length && <EmptyState>{t("No reset records yet. Reading an active quota window will show its estimated cycle start.")}</EmptyState>}</div>
     <p className="fine-print reset-note">{t("Estimated starts subtract the window duration from its next reset time. Missing historical cycles are not reconstructed. The selected range ends immediately before the second reset.")}</p>
   </section></section>;
 }
