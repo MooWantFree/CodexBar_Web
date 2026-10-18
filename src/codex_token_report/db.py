@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
     output_tokens INTEGER NOT NULL,
     reasoning_output_tokens INTEGER NOT NULL,
     total_tokens INTEGER NOT NULL,
+    session_service_tier TEXT,
     service_tier TEXT NOT NULL DEFAULT 'unknown',
     tier_source TEXT,
     pricing_model TEXT,
@@ -206,6 +207,7 @@ class Database:
             self._migrate_usage_events(connection)
             self._migrate_file_state(connection)
             self._migrate_trace_coverage(connection)
+            self._migrate_priority_turn_ids(connection)
 
     @staticmethod
     def _migrate_usage_events(connection: sqlite3.Connection) -> None:
@@ -217,6 +219,7 @@ class Database:
             "session_id": "TEXT",
             "ordinal": "INTEGER",
             "is_subagent": "INTEGER NOT NULL DEFAULT 0",
+            "session_service_tier": "TEXT",
             "service_tier": "TEXT NOT NULL DEFAULT 'unknown'",
             "tier_source": "TEXT",
             "pricing_model": "TEXT",
@@ -286,6 +289,29 @@ class Database:
             FROM trace_state
             WHERE coverage_start_utc IS NOT NULL AND coverage_end_utc IS NOT NULL
             """
+        )
+
+    @staticmethod
+    def _migrate_priority_turn_ids(connection: sqlite3.Connection) -> None:
+        # Repair saved IDs even when the original trace rows have been pruned.
+        # A correctly normalized row already in the cache takes precedence.
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO priority_turns (
+                source_path, turn_id, thread_id, pricing_model, requested_tier,
+                trace_timestamp_utc, source_row_id
+            )
+            SELECT source_path, trim(turn_id, '"'), trim(thread_id, '"'),
+                   pricing_model, requested_tier, trace_timestamp_utc, source_row_id
+            FROM priority_turns
+            WHERE substr(turn_id, 1, 1) = '"' AND substr(turn_id, -1, 1) = '"'
+              AND length(turn_id) > 2
+            """
+        )
+        connection.execute(
+            """DELETE FROM priority_turns
+            WHERE substr(turn_id, 1, 1) = '"' AND substr(turn_id, -1, 1) = '"'
+              AND length(turn_id) > 2"""
         )
 
     def connect(self) -> sqlite3.Connection:
@@ -362,6 +388,7 @@ class Database:
             "session_id": None,
             "ordinal": None,
             "is_subagent": 0,
+            "session_service_tier": None,
             "project_key": None,
             "project_path": None,
             "workspace_root": None,
@@ -530,14 +557,15 @@ class Database:
                 source_kind, timestamp_utc, local_date,
                 model, turn_id, response_id, input_tokens, cached_input_tokens,
                 cache_write_input_tokens, output_tokens, reasoning_output_tokens, total_tokens,
-                service_tier, tier_source, pricing_model, project_key, project_path,
+                session_service_tier, service_tier, tier_source, pricing_model, project_key, project_path,
                 workspace_root, working_directory
             ) VALUES (
                 :event_id, :source_file, :session_id, :ordinal, :is_subagent,
                 :source_kind, :timestamp_utc, :local_date,
                 :model, :turn_id, :response_id, :input_tokens, :cached_input_tokens,
                 :cache_write_input_tokens, :output_tokens, :reasoning_output_tokens,
-                :total_tokens, :service_tier, :tier_source, :pricing_model, :project_key,
+                :total_tokens, :session_service_tier, :service_tier, :tier_source,
+                :pricing_model, :project_key,
                 :project_path, :workspace_root, :working_directory
             )
             ON CONFLICT(event_id) DO UPDATE SET
@@ -557,6 +585,8 @@ class Database:
                 output_tokens=excluded.output_tokens,
                 reasoning_output_tokens=excluded.reasoning_output_tokens,
                 total_tokens=excluded.total_tokens,
+                session_service_tier=COALESCE(
+                    excluded.session_service_tier, usage_events.session_service_tier),
                 service_tier=CASE WHEN excluded.service_tier = 'unknown'
                     THEN usage_events.service_tier ELSE excluded.service_tier END,
                 tier_source=COALESCE(excluded.tier_source, usage_events.tier_source),
@@ -889,22 +919,31 @@ class Database:
                 """,
                 (source_path,),
             )
+            connection.execute(
+                """
+                UPDATE usage_events
+                SET service_tier = session_service_tier, tier_source = 'session_settings'
+                WHERE session_service_tier IN ('standard', 'priority')
+                """
+            )
+            # Explicit per-turn request evidence wins over thread defaults;
+            # absence of a trace marker must never erase session settings.
             turns = connection.execute(
                 """
-                SELECT turn_id, pricing_model
+                SELECT turn_id, pricing_model, requested_tier
                 FROM priority_turns
-                WHERE source_path = ?
+                WHERE source_path = ? AND requested_tier IN ('standard', 'priority')
                 """,
                 (source_path,),
             ).fetchall()
             connection.executemany(
                 """
                 UPDATE usage_events
-                SET service_tier = 'priority', tier_source = 'logs_2_request',
+                SET service_tier = ?, tier_source = 'logs_2_request',
                     pricing_model = COALESCE(?, model)
                 WHERE turn_id = ?
                 """,
-                [(row["pricing_model"], row["turn_id"]) for row in turns],
+                [(row["requested_tier"], row["pricing_model"], row["turn_id"]) for row in turns],
             )
             rows = connection.execute(
                 """

@@ -14,9 +14,9 @@ from zoneinfo import ZoneInfo
 from .db import Database
 from .projects import ProjectIdentity, ProjectResolver
 from .session_quota import SessionQuotaHistory, finalize_quota_samples, quota_candidates
-from .tiers import PriorityTraceScanner
+from .tiers import PriorityTraceScanner, normalize_service_tier
 
-SCANNER_PARSER_VERSION = "5"
+SCANNER_PARSER_VERSION = "7"
 PREFIX_ANCHOR_BYTES = 4096
 
 
@@ -46,6 +46,10 @@ class ParserState:
     is_subagent: bool = False
     subagent_history_start_ordinal: int | None = None
     current_model: str | None = None
+    current_turn_id: str | None = None
+    pending_tier_turn_id: str | None = None
+    current_service_tier: str | None = None
+    tier_by_turn: dict[str, str | None] = field(default_factory=dict)
     current_project: ProjectIdentity | None = None
     model_by_turn: dict[str, str] = field(default_factory=dict)
     project_by_turn: dict[str, ProjectIdentity] = field(default_factory=dict)
@@ -72,6 +76,16 @@ class ParserState:
                     "subagent_history_start_ordinal"
                 ),
                 current_model=payload.get("current_model"),
+                current_turn_id=payload.get("current_turn_id"),
+                pending_tier_turn_id=payload.get("pending_tier_turn_id"),
+                current_service_tier=(
+                    normalize_service_tier(payload.get("current_service_tier"))
+                    or ("unknown" if payload.get("current_service_tier") is not None else None)
+                ),
+                tier_by_turn={
+                    str(key): normalize_service_tier(tier) or ("unknown" if tier is not None else None)
+                    for key, tier in (payload.get("tier_by_turn") or {}).items()
+                },
                 current_project=(
                     ProjectIdentity(**current_project) if current_project else None
                 ),
@@ -288,7 +302,8 @@ class SessionScanner:
         except ValueError:
             return None
 
-        turn_id = str(payload.get("turn_id") or "") or None
+        turn_id = str(payload.get("turn_id") or "") or state.current_turn_id
+        session_tier = state.tier_by_turn.get(turn_id, state.current_service_tier)
         response_id = str(payload.get("response_id") or "") or None
         model = state.current_model
         project = state.current_project
@@ -310,6 +325,10 @@ class SessionScanner:
         if not total_tokens:
             total_tokens = input_tokens + output_tokens
         ordinal = self._ordinal(row.get("ordinal"), line_number)
+        if turn_id == state.pending_tier_turn_id:
+            # task_started precedes thread_settings_applied in some rollouts.
+            # Keep that turn's tier provisional until its first valid usage.
+            state.pending_tier_turn_id = None
 
         return {
             "source_kind": source_kind,
@@ -327,8 +346,9 @@ class SessionScanner:
             "output_tokens": output_tokens,
             "reasoning_output_tokens": reasoning_tokens,
             "total_tokens": total_tokens,
-            "service_tier": "unknown",
-            "tier_source": None,
+            "session_service_tier": session_tier,
+            "service_tier": session_tier or "unknown",
+            "tier_source": "session_settings" if session_tier in {"standard", "priority"} else None,
             "pricing_model": model,
             "project_key": project.key if project else None,
             "project_path": project.path if project else None,
@@ -442,8 +462,39 @@ class SessionScanner:
                         payload, state, incremental=incremental
                     )
                     continue
+                owns_row = not (
+                    state.is_subagent
+                    and state.subagent_history_start_ordinal is not None
+                    and self._ordinal(row.get("ordinal"), state.line_number)
+                    < state.subagent_history_start_ordinal
+                )
+                if row_type == "event_msg" and owns_row:
+                    if payload.get("type") == "thread_settings_applied":
+                        settings = payload.get("thread_settings")
+                        state.current_service_tier = normalize_service_tier(
+                            settings.get("service_tier") if isinstance(settings, dict) else None
+                        ) or "unknown"
+                        if state.pending_tier_turn_id:
+                            state.tier_by_turn[state.pending_tier_turn_id] = state.current_service_tier
+                        continue
+                    if payload.get("type") == "task_started":
+                        state.current_turn_id = str(payload.get("turn_id") or "") or None
+                        state.pending_tier_turn_id = state.current_turn_id
+                        if state.current_turn_id:
+                            state.tier_by_turn[state.current_turn_id] = state.current_service_tier
+                        continue
+                    if payload.get("type") == "task_complete":
+                        state.pending_tier_turn_id = None
+                        continue
                 if row_type == "turn_context":
                     turn_id = str(payload.get("turn_id") or "")
+                    if owns_row and turn_id:
+                        if state.current_turn_id != turn_id:
+                            state.pending_tier_turn_id = turn_id
+                        state.current_turn_id = turn_id
+                        # A repeated context must not reopen a tier already
+                        # confirmed by usage, or alter delayed older-turn usage.
+                        state.tier_by_turn.setdefault(turn_id, state.current_service_tier)
                     state.current_model = str(payload.get("model") or "") or None
                     state.current_project = self.projects.resolve(payload)
                     if turn_id and state.current_model:
@@ -660,19 +711,13 @@ class SessionScanner:
                     )
 
             trace = self.priority_trace.scan()
-            if trace.available:
-                tier_counts = self.database.classify_service_tiers(
-                    source_path=trace.source_path,
-                    coverage_start_utc=trace.coverage_start_utc,
-                    coverage_end_utc=trace.coverage_end_utc,
-                )
-            else:
-                stats = self.database.storage_stats()
-                tier_counts = {
-                    "standard": stats["standard_events"],
-                    "priority": stats["priority_events"],
-                    "unknown": stats["unknown_events"],
-                }
+            # Session evidence works without a trace DB. Previously saved trace
+            # evidence also remains usable when the source is missing or locked.
+            tier_counts = self.database.classify_service_tiers(
+                source_path=trace.source_path,
+                coverage_start_utc=trace.coverage_start_utc,
+                coverage_end_utc=trace.coverage_end_utc,
+            )
 
             finished = datetime.now(UTC)
             result = ScanResult(

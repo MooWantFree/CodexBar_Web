@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from contextlib import closing
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,12 +13,24 @@ from .db import Database
 
 _REQUEST_MARKER = "websocket request:"
 _TAGS_MARKER = "tags_json="
-_PARSER_VERSION = "2"
+_PARSER_VERSION = "3"
 _SUBMISSION_MARKER = "Submission sub=Submission {"
 _SUBMISSION_TIER = re.compile(
-    r'service_tier:\s*Some\(Some\("(?P<tier>priority|fast)"\)\)', re.IGNORECASE
+    r'service_tier:\s*Some\(Some\("(?P<tier>priority|fast|default|standard)"\)\)',
+    re.IGNORECASE,
 )
 _SUBMISSION_ID = re.compile(r'\bid:\s*"(?P<value>[^"]+)"')
+
+
+def normalize_service_tier(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    tier = value.strip().lower()
+    if tier in {"priority", "fast"}:
+        return "priority"
+    if tier in {"default", "standard"}:
+        return "standard"
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +88,21 @@ class PriorityTraceScanner:
             rf"(?:^|[\s,\[({{]){re.escape(name)}=([^\s,\])}}:]+)"
         )
         match = pattern.search(text)
-        return match.group(1) if match else None
+        if not match:
+            return None
+        return match.group(1).strip('"') or None
 
     @classmethod
     def parse_priority_row(
+        cls, *, source_path: str, row_id: int, timestamp: int, body: str,
+    ) -> PriorityTraceTurn | None:
+        turn = cls.parse_trace_row(
+            source_path=source_path, row_id=row_id, timestamp=timestamp, body=body,
+        )
+        return turn if turn and turn.requested_tier == "priority" else None
+
+    @classmethod
+    def parse_trace_row(
         cls,
         *,
         source_path: str,
@@ -96,8 +120,8 @@ class PriorityTraceScanner:
                 return None
             if not isinstance(request, dict) or request.get("type") != "response.create":
                 return None
-            tier = str(request.get("service_tier") or "").lower()
-            if tier not in {"priority", "fast"}:
+            tier = normalize_service_tier(request.get("service_tier"))
+            if tier is None:
                 return None
             turn_id = (
                 cls._prefix_value("turn.id", prefix)
@@ -112,7 +136,7 @@ class PriorityTraceScanner:
                 turn_id=turn_id,
                 thread_id=cls._prefix_value("thread_id", prefix),
                 pricing_model=model,
-                requested_tier="priority",
+                requested_tier=tier,
                 trace_timestamp_utc=cls._utc_iso(timestamp),
                 source_row_id=row_id,
             )
@@ -121,10 +145,13 @@ class PriorityTraceScanner:
         if tags_index >= 0 and _SUBMISSION_MARKER not in body:
             prefix = body[:tags_index]
             try:
-                tags, _ = json.JSONDecoder().raw_decode(body[tags_index + len(_TAGS_MARKER):])
+                tags, _ = json.JSONDecoder().raw_decode(
+                    body[tags_index + len(_TAGS_MARKER):].lstrip()
+                )
             except (json.JSONDecodeError, TypeError):
                 return None
-            if not isinstance(tags, dict) or tags.get("service_tier") not in {"priority", "fast"}:
+            tier = normalize_service_tier(tags.get("service_tier")) if isinstance(tags, dict) else None
+            if tier is None:
                 return None
             turn_id = cls._prefix_value("turn.id", prefix) or cls._prefix_value("turn_id", prefix)
             if not turn_id:
@@ -133,7 +160,7 @@ class PriorityTraceScanner:
                 source_path=source_path, turn_id=turn_id,
                 thread_id=cls._prefix_value("thread_id", prefix),
                 pricing_model=(cls._prefix_value("model", prefix) or "").strip('"') or None,
-                requested_tier="priority", trace_timestamp_utc=cls._utc_iso(timestamp),
+                requested_tier=tier, trace_timestamp_utc=cls._utc_iso(timestamp),
                 source_row_id=row_id,
             )
 
@@ -151,7 +178,7 @@ class PriorityTraceScanner:
             turn_id=id_match.group("value"),
             thread_id=cls._prefix_value("thread_id", prefix),
             pricing_model=None,
-            requested_tier="priority",
+            requested_tier=normalize_service_tier(tier_match.group("tier")) or "priority",
             trace_timestamp_utc=cls._utc_iso(timestamp),
             source_row_id=row_id,
         )
@@ -178,7 +205,7 @@ class PriorityTraceScanner:
         try:
             identity = self._source_identity(self.path)
             uri = f"{self.path.resolve().as_uri()}?mode=ro"
-            with sqlite3.connect(uri, uri=True, timeout=0.25) as connection:
+            with closing(sqlite3.connect(uri, uri=True, timeout=0.25)) as connection:
                 connection.execute("PRAGMA query_only = ON")
                 bounds = connection.execute(
                     "SELECT COALESCE(MAX(id), 0), MIN(ts), MAX(ts) FROM logs"
@@ -224,7 +251,7 @@ class PriorityTraceScanner:
             turn
             for row_id, timestamp, body in rows
             if (
-                turn := self.parse_priority_row(
+                turn := self.parse_trace_row(
                     source_path=source_path,
                     row_id=int(row_id),
                     timestamp=int(timestamp),
@@ -251,7 +278,8 @@ class PriorityTraceScanner:
         with self.database.connect() as connection:
             cached_turns = int(
                 connection.execute(
-                    "SELECT COUNT(*) FROM priority_turns WHERE source_path = ?", (source_path,)
+                    "SELECT COUNT(*) FROM priority_turns "
+                    "WHERE source_path = ? AND requested_tier = 'priority'", (source_path,)
                 ).fetchone()[0]
             )
         self.database.set_metadata(version_key, _PARSER_VERSION)
@@ -259,7 +287,7 @@ class PriorityTraceScanner:
             source_path=source_path,
             available=True,
             scanned_rows=len(rows),
-            discovered_priority_turns=len(turns),
+            discovered_priority_turns=sum(turn.requested_tier == "priority" for turn in turns),
             cached_priority_turns=cached_turns,
             last_row_id=max_row_id,
             coverage_start_utc=coverage_start,

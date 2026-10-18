@@ -22,6 +22,12 @@ API 等价金额属于估算, 不是订阅账单. 当前调用统计尚未按账
 历史显示的限制见下方“当前账号额度”和“备份与跨机迁移”. 
 
 API Fast 倍率采用 CodexBar 的硬编码表方式维护, 与订阅 Credits 倍率分开.
+Fast 档位同时读取会话 JSONL 的 `thread_settings_applied` 设置与 `logs_2.sqlite` 请求 trace.
+逐轮请求的明确档位优先于会话设置, 会话设置优先于 trace 缺失推断; 两种来源分别保存,
+trace 不存在、暂时不可读或已被清理时仍使用已保存证据. 设置按轮次生效并随增量扫描保存;
+即使设置事件晚于 `task_started`, 首条有效用量出现前仍会更新当前轮次的档位.
+子会话不会继承复制的父会话设置. 升级后自动重解析可用日志并修复旧 trace ID 的引号,
+保留已采集用量和价格快照.
 GPT-6 Sol 按[官方模型定价](https://developers.openai.com/api/docs/models/gpt-6-sol)使用 2×.
 GPT-6 Luna 按[官方模型定价](https://developers.openai.com/api/docs/models/gpt-6-luna)使用 2×.
 旧快照缺失的已知 Fast 倍率会在读取时补齐, 保留当时的 Token 单价、日期和手工覆盖.

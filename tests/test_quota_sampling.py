@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
@@ -136,6 +137,13 @@ def test_directory_switch_waits_for_sampler_and_following_samples_use_new_home(
     with TestClient(app) as client, ThreadPoolExecutor(max_workers=1) as executor:
         try:
             assert started.wait(2)
+            # The directory update waits for scan_lock before blocking quota
+            # admissions. Finish startup scanning so this test exercises the
+            # in-flight sampler, rather than racing that independent scan.
+            deadline = time.monotonic() + 2
+            while app.state.scan_status["state"] != "complete":
+                assert time.monotonic() < deadline, "Startup scan did not finish"
+                time.sleep(0.005)
             switching = executor.submit(client.put, "/api/settings", json={"codex_home": str(selected)})
             assert validated.wait(2)
             assert not switching.done()
