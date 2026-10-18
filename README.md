@@ -6,6 +6,20 @@ Windows版本的codexbar总是统计不了当日用量, 于是纯Vibe Coding做�
 
 统计保存到本地 SQLite, 源日志清空后仍可查看已经采集的记录. 
 
+## 应用截图
+
+用量总览:
+
+![用量总览: Token、模型与 API 等价成本](docs/screenshots/overview.jpg)
+
+会话用量:
+
+![会话用量: 示例会话排行与父子会话](docs/screenshots/sessions.jpg)
+
+额度等价美元与保存的周期历史:
+
+![额度等价美元: 周期换算与保存的历史读数](docs/screenshots/quota-value.jpg)
+
 ## 功能速览
 
 | 功能 | 可以查看或操作 |
@@ -42,20 +56,6 @@ Fast 倍率尚未收录时, 按 CodexBar 使用 Standard 基价暂估, 金额显
 服务启动后自动读取账号额度, 此后每 65 秒采样一次; 关闭浏览器页面后仍继续记录, 页面打开时也会自动更新.
 提前重置需要两次间隔至少 60 秒的一致读数确认, 通常几分钟内出现在“重置日期”中, 重置时刻仍标为推算.
 自动识别需要本地服务持续运行、Codex 已登录且额度查询成功; 服务停止期间未采集的历史无法完整还原.
-
-## 应用截图
-
-用量总览: 
-
-![用量总览: Token、模型与 API 等价成本](docs/screenshots/overview.jpg)
-
-会话用量: 
-
-![会话用量: 示例会话排行与父子会话](docs/screenshots/sessions.jpg)
-
-额度等价美元与保存的周期历史: 
-
-![额度等价美元: 周期换算与保存的历史读数](docs/screenshots/quota-value.jpg)
 
 ## 部署说明
 
