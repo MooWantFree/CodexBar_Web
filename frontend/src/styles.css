@@ -24,6 +24,13 @@ button, input, select { font: inherit; }
 button, a, input, select { outline-offset: 3px; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid rgba(39,122,217,.5); }
 
+body.service-offline { overflow: hidden; }
+.service-offline-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 32px 28px; overflow-y: auto; text-align: center; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 80px rgba(17, 28, 46, .24); }
+.service-offline-dialog::backdrop { background: rgba(23, 32, 51, .48); backdrop-filter: blur(4px); }
+.service-offline-icon { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto 18px; color: var(--danger); background: #fff0f2; border-radius: 50%; font-size: 28px; font-weight: 700; }
+.service-offline-dialog h2 { margin-bottom: 12px; font-size: 22px; }
+.service-offline-dialog p { margin-bottom: 24px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
 .sidebar {
   position: fixed; inset: 0 auto 0 0; z-index: 30; width: var(--sidebar-width); padding: 26px 18px;
   display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--border); background: #fbfcfe;
