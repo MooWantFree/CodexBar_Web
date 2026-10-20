@@ -36,7 +36,7 @@ body.service-offline { overflow: hidden; }
   display: flex; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--border); background: #fbfcfe;
 }
 .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 28px; }
-.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; color: white; background: var(--blue); border-radius: 10px; font-weight: 800; box-shadow: 0 8px 20px rgba(39,122,217,.22); }
+.brand-mark { display: block; flex: none; width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 8px 20px rgba(39,122,217,.22); }
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: 14px; }
 .brand small { margin-top: 3px; color: var(--muted); font-size: 9px; letter-spacing: .12em; }
