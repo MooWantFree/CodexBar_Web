@@ -27,6 +27,7 @@ function mount(initialRange = baseRange, quota = {}) {
 }
 const day = value => document.querySelector(`button[data-date="${value}"]`);
 const openPicker = () => fireEvent.click(screen.getByRole('button', { name: /^Select date range,/ }));
+const confirmRange = () => fireEvent.click(screen.getByRole('button', { name: 'Confirm', exact: true }));
 beforeEach(async () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-01T17:00:00Z'));
   Object.assign(document.body.dataset, { timezone: 'Asia/Taipei', minimumDate: '2026-08-01', maximumDate: '2026-10-02' });
@@ -50,36 +51,53 @@ describe('date controls', () => {
     document.body.dataset.timezone = 'America/Los_Angeles';
     expect(todayInTimeZone()).toBe('2026-10-01');
   });
-  it('shows exact seconds until a time edit switches to minute precision', () => {
+  it('applies time edits and switches to minute precision only after confirmation', () => {
     const { setRange } = mount(exactRange);
     expect(document.querySelector('#rangeStartLabel').textContent).toContain('18:23:31');
     expect(document.querySelector('#rangeEndLabel').textContent).toContain('01:04:22');
     openPicker();
     expect(screen.getByText('This range uses exact reset times. Editing the date or time switches to minute precision.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Start hour'), { target: { value: '19' } });
     fireEvent.change(screen.getByLabelText('End minute'), { target: { value: '05' } });
-    expect(setRange).toHaveBeenLastCalledWith({ start: '2026-09-30', end: '2026-10-02', startTime: '18:23', endTime: '01:05', startAt: '', endAt: '' });
+    expect(setRange).not.toHaveBeenCalled();
+    expect(document.querySelector('#rangeStartLabel').textContent).toContain('18:23:31');
+    expect(document.querySelector('#rangeEndLabel').textContent).toContain('01:04:22');
+    expect(document.querySelector('#dateRangeDialog').open).toBe(true);
+    confirmRange();
+    expect(setRange).toHaveBeenCalledExactlyOnceWith({ start: '2026-09-30', end: '2026-10-02', startTime: '19:23', endTime: '01:05', startAt: '', endAt: '' });
     expect(document.querySelector('#rangeEndLabel').textContent).toContain('01:05');
     expect(document.querySelector('#calendarPrecision')).toBeNull();
-    expect(document.querySelector('#dateRangeDialog').open).toBe(true);
+    expect(document.querySelector('#dateRangeDialog').open).toBe(false);
   });
-  it('commits complete dates with chosen times and clears exact boundaries', () => {
+  it('keeps complete dates as a draft until confirmation', () => {
     const { setRange } = mount({ ...exactRange, startTime: '09:15', endTime: '18:45', startAt: '', endAt: '' });
     openPicker(); fireEvent.click(day('2026-10-01'));
     expect(setRange).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Confirm', exact: true }).disabled).toBe(true);
     fireEvent.click(day('2026-10-02'));
-    expect(setRange).toHaveBeenLastCalledWith({ start: '2026-10-01', end: '2026-10-02', startTime: '09:15', endTime: '18:45', startAt: '', endAt: '' });
+    expect(setRange).not.toHaveBeenCalled();
+    expect(document.querySelector('#dateRangeDialog').open).toBe(true);
+    fireEvent.pointerOver(day('2026-10-01'));
+    expect(day('2026-10-02').className).toContain('selected-end');
+    confirmRange();
+    expect(setRange).toHaveBeenCalledExactlyOnceWith({ start: '2026-10-01', end: '2026-10-02', startTime: '09:15', endTime: '18:45', startAt: '', endAt: '' });
     expect(document.querySelector('#dateRangeDialog').open).toBe(false);
     expect(document.activeElement.id).toBe('dateRangeButton');
   });
   it('supports the same day and rejects reversed times without changing applied filters', () => {
     const { setRange } = mount({ ...baseRange, startTime: '09:15', endTime: '18:45' });
     openPicker(); fireEvent.click(day('2026-10-01')); fireEvent.click(day('2026-10-01'));
+    confirmRange();
     expect(setRange).toHaveBeenLastCalledWith(expect.objectContaining({ start: '2026-10-01', end: '2026-10-01' }));
     openPicker(); setRange.mockClear();
     fireEvent.change(screen.getByLabelText('End hour'), { target: { value: '08' } });
+    expect(screen.getByRole('button', { name: 'Confirm', exact: true }).disabled).toBe(true);
+    confirmRange();
     expect(setRange).not.toHaveBeenCalled();
     expect(screen.getByText('The end time cannot precede the start time. Adjust the date or time.')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('End hour'), { target: { value: '10' } });
+    expect(setRange).not.toHaveBeenCalled();
+    confirmRange();
     expect(setRange).toHaveBeenLastCalledWith(expect.objectContaining({ endTime: '10:45' }));
   });
   it('restarts an incomplete range when an earlier end date is chosen', () => {
@@ -88,6 +106,8 @@ describe('date controls', () => {
     expect(setRange).not.toHaveBeenCalled();
     expect(day('2026-10-01').getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(day('2026-10-02'));
+    expect(setRange).not.toHaveBeenCalled();
+    confirmRange();
     expect(setRange).toHaveBeenCalledWith(expect.objectContaining({ start: '2026-10-01', end: '2026-10-02' }));
   });
   it('localizes reset highlights and future-date accessibility labels', async () => {
@@ -211,9 +231,22 @@ describe('date controls', () => {
     expect(setRange).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Start hour').value).toBe('00');
     expect(screen.getByLabelText('End minute').value).toBe('59');
+    expect(screen.getByRole('button', { name: 'Confirm', exact: true }).disabled).toBe(true);
     fireEvent(document.querySelector('#dateRangeDialog'), new Event('cancel', { cancelable: true }));
     expect(document.querySelector('#dateRangeDialog').open).toBe(false);
     expect(document.activeElement.id).toBe('dateRangeButton');
+    expect(document.querySelector('#rangeStartLabel').textContent).toContain('18:23:31');
+  });
+  it('discards unconfirmed date and time edits when closed', () => {
+    const { setRange } = mount(exactRange); openPicker();
+    fireEvent.click(day('2026-10-01')); fireEvent.click(day('2026-10-02'));
+    fireEvent.change(screen.getByLabelText('Start hour'), { target: { value: '09' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Close calendar' }));
+    expect(setRange).not.toHaveBeenCalled();
+    openPicker();
+    expect(screen.getByLabelText('Start hour').value).toBe('18');
+    confirmRange();
+    expect(setRange).toHaveBeenCalledExactlyOnceWith({ start: exactRange.start, end: exactRange.end, startTime: exactRange.startTime, endTime: exactRange.endTime, startAt: exactRange.startAt, endAt: exactRange.endAt });
     expect(document.querySelector('#rangeStartLabel').textContent).toContain('18:23:31');
   });
 });

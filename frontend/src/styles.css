@@ -130,8 +130,11 @@ h3 { margin: 0 0 16px; font-size: 13px; }
 .calendar-day:disabled { color: #b0bac8; background: transparent; cursor: not-allowed; }
 .calendar-day.selected-end { border-color: var(--blue); background: white; color: #175fae; }
 .calendar-day.selected-start { border-color: var(--blue); background: var(--blue); color: white; }
-.calendar-footer { margin: 12px 0 0; padding-top: 12px; color: var(--muted); border-top: 1px solid var(--border); font-size: 10px; text-align: right; }
+.calendar-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; color: var(--muted); border-top: 1px solid var(--border); font-size: 10px; text-align: left; }
+.calendar-footer p { margin: 0; }
 .calendar-footer strong { color: var(--text); font-weight: 800; }
+.calendar-footer .button { flex-shrink: 0; }
+.calendar-footer .button:disabled { cursor: not-allowed; }
 label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
 input[type="date"], select { color: var(--text); border: 1px solid var(--border); background: white; border-radius: 8px; padding: 8px 10px; }
 .status-strip { min-height: 39px; display: flex; align-items: center; color: var(--muted); font-size: 11px; padding: 7px 3px 2px; }

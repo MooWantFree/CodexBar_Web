@@ -6,14 +6,14 @@ addMessages({
   en: {
     '日期快捷选项': 'Date shortcuts', '今天': 'Today', '近 7 天': 'Last 7 days', '近 30 天': 'Last 30 days',
     '近 90 天': 'Last 90 days', '全部': 'All time', '开始时间': 'Start time', '结束时间': 'End time',
-    '选择日期范围': 'Select date range', '重置': 'Reset', '关闭日历': 'Close calendar',
+    '选择日期范围': 'Select date range', '重置': 'Reset', '关闭日历': 'Close calendar', '确定': 'Confirm',
     '开始日期': 'Start date', '结束日期': 'End date', '开始小时': 'Start hour', '开始分钟': 'Start minute',
     '结束小时': 'End hour', '结束分钟': 'End minute', '上个月': 'Previous month', '下个月': 'Next month',
     '请选择': 'Select a date', '请选择开始日期': 'Select the start date',
     '请选择结束日期 · 同一天也可选择': 'Select the end date · The same day is allowed',
     '结束时间不能早于开始时间，请调整日期或时分': 'The end time cannot precede the start time. Adjust the date or time.',
     '当前范围精确到重置时刻；手动修改日期或时分后按分钟筛选。': 'This range uses exact reset times. Editing the date or time switches to minute precision.',
-    '加粗日期': 'Bold dates', '表示额度重置记录（含推测）· 日期选完或修改时间后自动更新统计。': 'mark quota reset records, including estimates · Statistics update after selecting dates or changing the time.',
+    '加粗日期': 'Bold dates', '表示额度重置记录（含推测）': 'mark quota reset records, including estimates',
     '选择日期范围，{start} 至 {end}': 'Select date range, {start} to {end}',
     '未来日期不可选': 'Future dates are unavailable', '每周额度': 'Weekly quota',
     '{hours} 小时额度': '{hours}-hour quota', '{minutes} 分钟额度': '{minutes}-minute quota',
@@ -30,14 +30,14 @@ addMessages({
   ja: {
     '日期快捷选项': '日付のショートカット', '今天': '今日', '近 7 天': '過去 7 日間', '近 30 天': '過去 30 日間',
     '近 90 天': '過去 90 日間', '全部': '全期間', '开始时间': '開始時刻', '结束时间': '終了時刻',
-    '选择日期范围': '日付範囲を選択', '重置': 'リセット', '关闭日历': 'カレンダーを閉じる',
+    '选择日期范围': '日付範囲を選択', '重置': 'リセット', '关闭日历': 'カレンダーを閉じる', '确定': '確定',
     '开始日期': '開始日', '结束日期': '終了日', '开始小时': '開始時', '开始分钟': '開始分',
     '结束小时': '終了時', '结束分钟': '終了分', '上个月': '前の月', '下个月': '次の月',
     '请选择': '日付を選択', '请选择开始日期': '開始日を選択してください',
     '请选择结束日期 · 同一天也可选择': '終了日を選択してください · 同じ日も選択できます',
     '结束时间不能早于开始时间，请调整日期或时分': '終了時刻を開始時刻より前にはできません。日付または時刻を調整してください。',
     '当前范围精确到重置时刻；手动修改日期或时分后按分钟筛选。': '現在の範囲は正確なリセット時刻を使用しています。日付や時刻を変更すると分単位の絞り込みに切り替わります。',
-    '加粗日期': '太字の日付', '表示额度重置记录（含推测）· 日期选完或修改时间后自动更新统计。': 'は利用枠のリセット記録（推定を含む）です · 日付の選択や時刻の変更後に統計が自動更新されます。',
+    '加粗日期': '太字の日付', '表示额度重置记录（含推测）': 'は利用枠のリセット記録（推定を含む）です',
     '选择日期范围，{start} 至 {end}': '日付範囲を選択、{start} から {end}',
     '未来日期不可选': '未来の日付は選択できません', '每周额度': '週間利用枠',
     '{hours} 小时额度': '{hours} 時間の利用枠', '{minutes} 分钟额度': '{minutes} 分の利用枠',
@@ -87,7 +87,8 @@ function displayDate(value) {
 
 function copyRange(range) {
   return { start: parseDate(range.start) ? range.start : '', end: parseDate(range.end) ? range.end : '',
-    startTime: range.startTime || '00:00', endTime: range.endTime || '23:59' };
+    startTime: range.startTime || '00:00', endTime: range.endTime || '23:59',
+    startAt: range.startAt || '', endAt: range.endAt || '' };
 }
 
 function TimeControl({ side, value, onChange }) {
@@ -197,10 +198,10 @@ export default function DateControls() {
     if (open) triggerRef.current?.focus();
   }
 
-  function commit(next, close = true) {
-    if (!next.start || !next.end || `${next.start}T${next.startTime}` > `${next.end}T${next.endTime}`) return;
-    setRange({ ...next, startAt: '', endAt: '' });
-    if (close) closePicker();
+  function commit() {
+    if (!draft.start || !draft.end || invalid) return;
+    setRange(draft);
+    closePicker();
   }
 
   function select(value) {
@@ -208,19 +209,16 @@ export default function DateControls() {
     setFocusedDate(value);
     setHoverDate(null);
     if (phase === 'start' || !draft.start || value < draft.start) {
-      setDraft({ ...draft, start: value, end: '' });
+      setDraft({ ...draft, start: value, end: '', startAt: '', endAt: '' });
       setPhase('end');
     } else {
-      const next = { ...draft, end: value };
-      setDraft(next);
-      commit(next);
+      setDraft({ ...draft, end: value, startAt: '', endAt: '' });
+      setPhase('start');
     }
   }
 
   function changeTime(side, value) {
-    const next = { ...draft, [`${side}Time`]: value };
-    setDraft(next);
-    commit(next, false);
+    setDraft({ ...draft, [`${side}Time`]: value, startAt: '', endAt: '' });
   }
 
   function moveMonth(amount) {
@@ -308,7 +306,7 @@ export default function DateControls() {
           }}>
           <div className="calendar-heading"><h2 id="calendarTitle">{t('选择日期范围')}</h2><div>
             <button type="button" id="calendarReset" className="button ghost" onClick={() => {
-              setDraft({ start: '', end: '', startTime: '00:00', endTime: '23:59' }); setPhase('start'); setHoverDate(null); setFocusedDate(null);
+              setDraft({ start: '', end: '', startTime: '00:00', endTime: '23:59', startAt: '', endAt: '' }); setPhase('start'); setHoverDate(null); setFocusedDate(null);
             }}>{t('重置')}</button>
             <button type="button" id="calendarClose" className="calendar-icon-button" aria-label={t('关闭日历')} onClick={closePicker}>×</button>
           </div></div>
@@ -350,7 +348,10 @@ export default function DateControls() {
             </section>)}
           </div>
           {exact && <p id="calendarPrecision" className="fine-print">{t('当前范围精确到重置时刻；手动修改日期或时分后按分钟筛选。')}</p>}
-          <p className="calendar-footer"><strong>{t('加粗日期')}</strong> {t('表示额度重置记录（含推测）· 日期选完或修改时间后自动更新统计。')}</p>
+          <div className="calendar-footer">
+            <p><strong>{t('加粗日期')}</strong> {t('表示额度重置记录（含推测）')}</p>
+            <button type="button" id="calendarConfirm" className="button primary" disabled={!draft.start || !draft.end || invalid} onClick={commit}>{t('确定')}</button>
+          </div>
         </dialog>
       </div>
     </div>
