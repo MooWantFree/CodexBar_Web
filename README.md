@@ -1,10 +1,40 @@
 # Codex Token Report
 
-Windows版本的codexbar总是统计不了当日用量, 于是纯Vibe Coding做了一个Web版本.
+Windows 版本的 CodexBar 总是统计不了当日用量, 于是纯 Vibe Coding 做了一个 Web 版本.
 
-只读扫描 Codex 会话日志, 用浏览器查看 Token、Standard/Fast API 等价成本、Credits 估算, 以及已采集的账号额度与重置历史. 
+部分计算参考 [CodexBar](https://github.com/steipete/CodexBar).
 
-统计保存到本地 SQLite, 源日志清空后仍可查看已经采集的记录. 
+只读扫描本机 Codex 日志, 在浏览器查看 Token 用量、成本估算、项目与会话统计、账号额度和重置历史.
+统计保存在本地, 源日志清理后仍可查看已采集的记录.
+
+## 安装与启动
+
+需要 Python 3.12+ 和 [uv](https://docs.astral.sh/uv/). 下载或克隆仓库后, 在仓库根目录运行:
+
+```sh
+uv sync --locked
+uv run codex-token-report --port 8765 --tray
+```
+
+**所有参数均可选**; 不加参数时以普通网页模式启动并自动打开浏览器.
+
+| 参数 | 默认值 | 作用 |
+| --- | --- | --- |
+| `--host 地址` | `127.0.0.1` | 网页服务监听地址. |
+| `--port 端口` | `8765` | 网页服务端口. |
+| `--tray` | 不启用 | 启用系统托盘 / 菜单栏图标. |
+| `--no-browser` | 不启用 | 启动时不自动打开网页, 仍可手动打开. |
+| `--codex-home 路径` | 已保存的目录; 首次使用为用户主目录下的 `.codex` | 指定 Codex 日志目录. |
+| `--data-dir 路径` | Windows: `$env:LOCALAPPDATA\CodexTokenReport`; macOS / Linux: `~/.local/share/codex-token-report` | 指定统计数据库等应用数据的保存目录. |
+| `--timezone 时区` | `Asia/Taipei` | 统计使用的 IANA 时区, 如 `Asia/Shanghai`. |
+| `--scan-interval-minutes 分钟` | `60` | 后台日志扫描间隔; `0` 关闭定时扫描. |
+| `--scan-only` | 不启用 | 只扫描一次后退出, 不启动网页或托盘; 优先于 `--tray`. |
+| `-h` / `--help` | 不启用 | 显示帮助后退出. |
+
+## 更新
+
+更新代码后运行 `uv sync --locked`, 再重启程序. 修改前端源码后需重新构建,
+命令见[前端构建与更新](docs/details.md#前端构建与更新).
 
 ## 应用截图
 
@@ -20,165 +50,9 @@ Windows版本的codexbar总是统计不了当日用量, 于是纯Vibe Coding做�
 
 ![额度等价美元: 周期换算与保存的历史读数](docs/screenshots/quota-value.jpg)
 
-## 功能速览
+## 更多说明
 
-| 功能 | 可以查看或操作 |
-| --- | --- |
-| 用量总览 | Input、Cache read、Cache write、Output、模型用量、Standard/Fast 等价美元; 支持按天、按小时和精确时间范围统计. 无公开价格模型的用量单独保留. |
-| 设置与模型定价 | 手动填写 Codex 日志目录或调用系统文件夹选择器, 设置界面语言; 管理 models.dev 价格缓存、手工覆盖、调用时保存的价格快照, 以及按当前价格重算. |
-| 项目与会话 | 按 Git 项目归并用量; 查看父子会话树、搜索和排序会话, 展开逐调用明细与趋势. |
-| 额度与重置 | 当前登录账号的实时额度读数、确认或推测的重置时刻、周期美元换算、保存的历史与离线查看. |
-| 历史持久化 | 保存逐调用 Token、档位证据、会话元数据、价格快照和已采集额度; 源日志清空、归档或截断后继续保留. |
-| CSV 导出 | 导出当前日期范围、统计粒度和价格口径下的用量明细. |
-| 界面语言 | 中文、英语与日语, 默认按浏览器语言选择, 其他语言回退到英语; 可在设置中手动选择, 切换立即生效. |
+- [使用与统计说明](docs/details.md): 价格与档位规则、额度采样、数据目录、更多启动方式及开发命令.
+- [前端开发说明](frontend/README.md)
 
-API 等价金额属于估算, 不是订阅账单. 当前调用统计尚未按账号区分, 额度换算和跨机
-历史显示的限制见下方“当前账号额度”和“备份与跨机迁移”. 
-
-API Fast 倍率采用 CodexBar 的硬编码表方式维护, 与订阅 Credits 倍率分开.
-Fast 档位同时读取会话 JSONL 的 `thread_settings_applied` 设置与 `logs_2.sqlite` 请求 trace.
-逐轮请求的明确档位优先于会话设置, 会话设置优先于 trace 缺失推断; 两种来源分别保存,
-trace 不存在、暂时不可读或已被清理时仍使用已保存证据. 设置按轮次生效并随增量扫描保存;
-即使设置事件晚于 `task_started`, 首条有效用量出现前仍会更新当前轮次的档位.
-子会话不会继承复制的父会话设置. 升级后自动重解析可用日志并修复旧 trace ID 的引号,
-保留已采集用量和价格快照.
-GPT-6 Sol 按[官方模型定价](https://developers.openai.com/api/docs/models/gpt-6-sol)使用 2×.
-GPT-6 Luna 按[官方模型定价](https://developers.openai.com/api/docs/models/gpt-6-luna)使用 2×.
-旧快照缺失的已知 Fast 倍率会在读取时补齐, 保留当时的 Token 单价、日期和手工覆盖.
-
-新 OpenAI 模型的 Standard 单价从 models.dev 的 OpenAI 目录自动读取. 扫描后检查价格,
-后台每 15 分钟检查一次; 有效目录缓存 24 小时, 未知模型或刷新失败按 15 分钟冷却重试.
-Fast 倍率尚未收录时, 按 CodexBar 使用 Standard 基价暂估, 金额显示黄色并在 hover 中说明
-尚未包含 Fast 加价. 完全无价时保留 Token 和未知标记, 不借用其他供应商的同名模型价格.
-新模型的旧快照缺价时使用首次取得的价格回填并标为估算, 后续涨价不改变该回填金额.
-手工覆盖保留明确的未知或数字倍率; 账号额度外推只使用已确认的价格.
-
-服务启动后自动读取账号额度, 此后每 65 秒采样一次; 关闭浏览器页面后仍继续记录, 页面打开时也会自动更新.
-提前重置需要两次间隔至少 60 秒的一致读数确认, 通常几分钟内出现在“重置日期”中, 重置时刻仍标为推算.
-自动识别需要本地服务持续运行、Codex 已登录且额度查询成功; 服务停止期间未采集的历史无法完整还原.
-
-## 部署说明
-
- Python 3.12 或更新版本、`uv`, 以及本机可读取的 Codex 日志目录. 
-
-下载或克隆仓库后, 在仓库根目录运行下列命令. 浏览器版本不需要安装 `desktop` 或开发依赖; 实时账号额度
-另需可用的 Codex CLI 和 ChatGPT 登录, 已有历史查看与本地日志统计不依赖实时额度查询. 
-
-### Windows（PowerShell 7）
-
-```powershell
-uv sync --locked
-uv run codex-token-report
-```
-
-默认打开 `http://127.0.0.1:8765`. 
-
-设置页的 Codex 日志目录可手动填写, 也可点击“选择文件夹”打开本机系统对话框.
-选择后点击“保存并扫描”生效; 取消选择保留原来的输入. 选择器仅允许从本机页面打开,
-无法使用系统对话框时仍可手动填写目录.
-
-### macOS / Linux（终端）
-
-两者使用相同的浏览器服务入口, Shell 中运行: 
-
-```sh
-uv sync --locked
-uv run codex-token-report
-```
-
-默认地址 `http://127.0.0.1:8765`. 实时额度查询需要当前终端的 `PATH` 中存在
-`codex`, 或通过 `CODEX_TOKEN_REPORT_CODEX_BIN` 指定可执行文件; Windows 桌面版 CLI
-的自动查找逻辑不适用于 macOS / Linux. 需在 Shell 中设置: 
-
-```sh
-export CODEX_TOKEN_REPORT_CODEX_BIN="/path/to/codex"
-```
-
-### 更新与重启
-
-仓库已包含前端构建产物, 正常启动不需要 Node.js. 如果更新或修改了 `frontend/` 中的前端源码,
-需要安装 Node.js 20 或更新版本, 并在仓库根目录重新安装前端依赖、编译前端（Windows / macOS / Linux 均适用）:
-
-```powershell
-npm --prefix frontend ci
-npm --prefix frontend run build
-```
-
-构建产物会更新到 `src/codex_token_report/static/webui/`. 更新代码后, 关闭旧服务,
-在仓库根目录重新启动, 然后刷新浏览器页面:
-
-```powershell
-uv run codex-token-report
-```
-
-后端不会自动重载; 若页面与运行中的后端版本不匹配, 统计区会明确提示重启.
-
-> 首次启动扫描所选 Codex 目录中的 `sessions`、`archived_sessions` 和 `logs_2.sqlite`. 
-> 默认读取环境变量 `CODEX_HOME`, 未设置时使用当前用户主目录下的 `.codex`: Windows
-> 为 `$env:USERPROFILE\.codex`, macOS / Linux 为 `~/.codex`. 通过 `--codex-home` 可以覆盖. 
->
-> 也可在网页“设置”中选择含 `sessions`、`archived_sessions` 或 `logs_2.sqlite` 的 Codex
-> 主目录. 目录必须已存在且可读; 点击“保存并扫描”后立即切换并扫描, 已有统计和历史继续保留.
-> 目录设置随统计数据库持久保存, 后续启动与 `--scan-only` 默认继续使用.
-> 显式 `--codex-home` 优先于保存的设置; 未保存时才读取 `CODEX_HOME` 或默认目录.
->
-> 统计数据库默认位于 Windows 的 `$env:LOCALAPPDATA\CodexTokenReport\usage.sqlite3`, 
-> macOS / Linux 为 `~/.local/share/codex-token-report/usage.sqlite3`. 可通过 `--data-dir`
-> 或 `CODEX_TOKEN_REPORT_DATA_DIR` 指定持久数据目录; 不要把它放进将被清空的日志目录. 
-
-## 常用命令
-
-只更新本地统计数据库, 不启动网页: 
-
-```powershell
-uv run codex-token-report --scan-only
-```
-
-指定 Codex 目录和数据目录（Windows / PowerShell）: 
-
-```powershell
-uv run codex-token-report `
-  --codex-home "$env:USERPROFILE\.codex" `
-  --data-dir "$env:LOCALAPPDATA\CodexTokenReport"
-```
-
-macOS / Linux 对应命令: 
-
-```sh
-uv run codex-token-report --codex-home "$HOME/.codex" --data-dir "$HOME/.local/share/codex-token-report"
-```
-
-使用可选桌面窗口外壳（依赖 pywebview; macOS / Linux 未实测, 浏览器版本可独立运行）: 
-
-```powershell
-uv sync --extra desktop
-uv run codex-token-report-desktop
-```
-
-## 开发与测试
-
-```powershell
-uv sync --locked --extra dev
-uv run ruff check src tests scripts
-uv run pytest
-```
-
-WebUI 使用 React, 源码位于 `frontend/`, 按页面、共享组件、数据请求和翻译模块拆分.
-生产构建随 Python 包分发, 正常启动不需要 Node.js. 修改前端需安装 Node.js 20 或更新版本:
-
-```powershell
-cd frontend
-npm ci
-npm test
-npm run build
-```
-
-热更新开发和扩展方式见 [前端开发说明](frontend/README.md).
-
-# 感谢
-
-部分计算参考 [CodexBar](https://github.com/steipete/CodexBar)
-
-## 许可证
-
-[GPL-3.0-only](LICENSE)
+许可证: [GPL-3.0-only](LICENSE).

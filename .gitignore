@@ -31,3 +31,6 @@ dist/
 build/
 node_modules/
 frontend/coverage/
+*.bat
+*.vbs
+*.lnk

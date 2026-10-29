@@ -29,6 +29,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Background scan interval; 0 disables it, default: 60",
     )
     parser.add_argument("--no-browser", action="store_true", help="Do not open the browser")
+    parser.add_argument("--tray", action="store_true", help="Run in the system tray / menu bar")
     parser.add_argument("--scan-only", action="store_true", help="Scan logs and exit")
     return parser
 
@@ -57,6 +58,12 @@ def main() -> None:
             timezone=settings.timezone,
         )
         print(json.dumps(scanner.scan().to_dict(), ensure_ascii=False, indent=2))
+        return
+
+    if args.tray:
+        from .tray import run_tray
+
+        run_tray(settings, open_browser=not args.no_browser)
         return
 
     if not args.no_browser:
