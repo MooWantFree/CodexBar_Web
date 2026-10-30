@@ -898,52 +898,67 @@ class Database:
     ) -> dict[str, int]:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            # Recompute historical evidence so late traces and source changes
+            # still apply. Materialize once, then update only changed final values
+            # to avoid repeatedly rewriting every event and its report indexes.
             connection.execute(
                 """
-                UPDATE usage_events
-                SET service_tier = 'unknown', tier_source = NULL, pricing_model = model
-                """
-            )
-            connection.execute(
-                """
-                UPDATE usage_events
-                SET service_tier = 'standard', tier_source = 'logs_2_absence'
-                WHERE turn_id IS NOT NULL AND turn_id != ''
-                  AND EXISTS (
-                      SELECT 1
-                      FROM trace_coverage AS coverage
-                      WHERE coverage.source_path = ?
-                        AND usage_events.timestamp_utc >= coverage.coverage_start_utc
-                        AND usage_events.timestamp_utc <= coverage.coverage_end_utc
-                  )
+                WITH evidence AS MATERIALIZED (
+                    SELECT
+                        event.event_id,
+                        event.model,
+                        event.session_service_tier,
+                        trace.requested_tier,
+                        trace.pricing_model AS trace_model,
+                        CASE
+                            WHEN trace.turn_id IS NOT NULL THEN 3
+                            WHEN event.session_service_tier IN ('standard', 'priority') THEN 2
+                            WHEN event.turn_id IS NOT NULL AND event.turn_id != ''
+                                AND EXISTS (
+                                    SELECT 1 FROM trace_coverage AS coverage
+                                    WHERE coverage.source_path = ?
+                                      AND event.timestamp_utc >= coverage.coverage_start_utc
+                                      AND event.timestamp_utc <= coverage.coverage_end_utc
+                                ) THEN 1
+                            ELSE 0
+                        END AS evidence_level
+                    FROM usage_events AS event
+                    LEFT JOIN priority_turns AS trace
+                      ON trace.source_path = ?
+                     AND trace.turn_id = event.turn_id
+                     AND trace.requested_tier IN ('standard', 'priority')
+                ), targets AS (
+                    SELECT
+                        event_id,
+                        CASE evidence_level
+                            WHEN 3 THEN requested_tier
+                            WHEN 2 THEN session_service_tier
+                            WHEN 1 THEN 'standard'
+                            ELSE 'unknown'
+                        END AS new_tier,
+                        CASE evidence_level
+                            WHEN 3 THEN 'logs_2_request'
+                            WHEN 2 THEN 'session_settings'
+                            WHEN 1 THEN 'logs_2_absence'
+                            ELSE NULL
+                        END AS new_source,
+                        CASE WHEN evidence_level = 3
+                            THEN COALESCE(trace_model, model)
+                            ELSE model
+                        END AS new_model
+                    FROM evidence
+                )
+                UPDATE usage_events AS event
+                SET service_tier = target.new_tier,
+                    tier_source = target.new_source,
+                    pricing_model = target.new_model
+                FROM targets AS target
+                WHERE target.event_id = event.event_id
+                  AND (event.service_tier IS NOT target.new_tier
+                       OR event.tier_source IS NOT target.new_source
+                       OR event.pricing_model IS NOT target.new_model)
                 """,
-                (source_path,),
-            )
-            connection.execute(
-                """
-                UPDATE usage_events
-                SET service_tier = session_service_tier, tier_source = 'session_settings'
-                WHERE session_service_tier IN ('standard', 'priority')
-                """
-            )
-            # Explicit per-turn request evidence wins over thread defaults;
-            # absence of a trace marker must never erase session settings.
-            turns = connection.execute(
-                """
-                SELECT turn_id, pricing_model, requested_tier
-                FROM priority_turns
-                WHERE source_path = ? AND requested_tier IN ('standard', 'priority')
-                """,
-                (source_path,),
-            ).fetchall()
-            connection.executemany(
-                """
-                UPDATE usage_events
-                SET service_tier = ?, tier_source = 'logs_2_request',
-                    pricing_model = COALESCE(?, model)
-                WHERE turn_id = ?
-                """,
-                [(row["requested_tier"], row["pricing_model"], row["turn_id"]) for row in turns],
+                (source_path, source_path),
             )
             rows = connection.execute(
                 """

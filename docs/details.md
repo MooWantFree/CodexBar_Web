@@ -99,6 +99,17 @@ GNOME 等桌面可能还需启用托盘扩展; 具体限制见
 macOS / Linux 为 `~/.local/share/codex-token-report/usage.sqlite3`. 可通过 `--data-dir`
 或 `CODEX_TOKEN_REPORT_DATA_DIR` 指定持久数据目录; 不要把它放进将被清空的日志目录.
 
+### 扫描耗时
+
+扫描跳过未变化的 JSONL, 对追加内容增量读取. 档位按现有证据重新计算, 仅写入分类、
+证据来源或计价模型发生变化的记录; 后到的 trace 和覆盖区间仍可修正历史分类.
+
+`--scan-only`、`POST /api/scan` 的结果及报表中的 `last_scan` 包含 `duration_seconds`
+和 `timings_seconds`. 分阶段字段为 `discovery`（文件发现与检查点读取）、`session_files`
+（日志读取及入库）、`priority_trace`、`classify_service_tiers`、`price_snapshots` 和
+`session_titles`. 耗时使用单调时钟, 包含价格快照和会话标题处理; 不包含等待扫描锁、
+保存耗时记录本身、后续在线价格刷新或前端报表刷新. `finished_at` 在这些扫描阶段完成后记录.
+
 ## 指定 Codex CLI
 
 实时额度查询需要可用的 Codex CLI 和 ChatGPT 登录. macOS / Linux 需确保 `codex`

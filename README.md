@@ -9,7 +9,8 @@ Windows 版本的 CodexBar 总是统计不了当日用量, 于是纯 Vibe Coding
 
 ## 安装与启动
 
-需要 Python 3.12+ 和 [uv](https://docs.astral.sh/uv/). 下载或克隆仓库后, 在仓库根目录运行:
+需要 Python 3.12+（`sqlite3` 运行库为 SQLite 3.35+）和 [uv](https://docs.astral.sh/uv/).
+下载或克隆仓库后, 在仓库根目录运行:
 
 ```sh
 uv sync --locked

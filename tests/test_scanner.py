@@ -1,11 +1,12 @@
 import json
 import sqlite3
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from codex_token_report import scanner as scanner_module
 from codex_token_report.db import Database
 from codex_token_report.scanner import SCANNER_PARSER_VERSION, ParserState, SessionScanner
 
@@ -121,6 +122,69 @@ def test_scanner_skips_unchanged_file(tmp_path: Path) -> None:
     assert first.scanned_files == 1
     assert second.scanned_files == 0
     assert second.unchanged_files == 1
+
+
+def test_scan_timings_include_snapshots_and_titles(tmp_path: Path, monkeypatch) -> None:
+    database = Database(tmp_path / "usage.sqlite3")
+    scanner = SessionScanner(codex_home=tmp_path / ".codex", database=database, timezone="UTC")
+    started = datetime(2026, 10, 31, tzinfo=UTC)
+    elapsed = 0.0
+
+    class Clock:
+        @staticmethod
+        def now(timezone):
+            return started + timedelta(seconds=elapsed)
+
+    def snapshots():
+        nonlocal elapsed
+        elapsed += 2.0
+
+    def titles():
+        nonlocal elapsed
+        elapsed += 3.0
+
+    monkeypatch.setattr(scanner_module, "datetime", Clock)
+    monkeypatch.setattr(scanner_module, "perf_counter", lambda: elapsed)
+    monkeypatch.setattr(database, "capture_price_snapshots", snapshots)
+    monkeypatch.setattr(scanner, "_scan_titles", titles)
+
+    result = scanner.scan()
+
+    assert result.started_at == started.isoformat()
+    assert result.finished_at == (started + timedelta(seconds=5)).isoformat()
+    assert result.duration_seconds == 5.0
+    assert result.timings_seconds == {
+        "discovery": 0.0,
+        "session_files": 0.0,
+        "priority_trace": 0.0,
+        "classify_service_tiers": 0.0,
+        "price_snapshots": 2.0,
+        "session_titles": 3.0,
+    }
+    assert json.loads(database.get_metadata("last_scan")) == result.to_dict()
+
+
+@pytest.mark.parametrize("failed_stage", ["price_snapshots", "session_titles"])
+def test_scan_does_not_record_success_before_final_stages(
+    tmp_path: Path, monkeypatch, failed_stage: str,
+) -> None:
+    database = Database(tmp_path / "usage.sqlite3")
+    scanner = SessionScanner(codex_home=tmp_path / ".codex", database=database, timezone="UTC")
+    scanner.scan()
+    previous = database.get_metadata("last_scan")
+
+    def fail():
+        raise RuntimeError("Final scan stage failed")
+
+    if failed_stage == "price_snapshots":
+        monkeypatch.setattr(database, "capture_price_snapshots", fail)
+    else:
+        monkeypatch.setattr(scanner, "_scan_titles", fail)
+
+    with pytest.raises(RuntimeError, match="Final scan stage failed"):
+        scanner.scan()
+
+    assert database.get_metadata("last_scan") == previous
 
 
 def test_scanner_keeps_events_after_source_file_disappears(tmp_path: Path) -> None:

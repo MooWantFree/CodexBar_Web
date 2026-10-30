@@ -8,6 +8,7 @@ from contextlib import closing
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -34,6 +35,8 @@ class ScanResult:
     tier_counts: dict[str, int]
     incremental_files: int = 0
     skipped_copied_events: int = 0
+    duration_seconds: float = 0.0
+    timings_seconds: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -586,8 +589,10 @@ class SessionScanner:
     def scan(self) -> ScanResult:
         with self._lock:
             started = datetime.now(UTC)
+            scan_started = perf_counter()
             files, missing = self._session_files()
             fingerprints = self.database.file_fingerprints()
+            discovered_at = perf_counter()
             scanned = 0
             unchanged = 0
             incremental_files = 0
@@ -710,7 +715,9 @@ class SessionScanner:
                         ),
                     )
 
+            files_finished_at = perf_counter()
             trace = self.priority_trace.scan()
+            trace_finished_at = perf_counter()
             # Session evidence works without a trace DB. Previously saved trace
             # evidence also remains usable when the source is missing or locked.
             tier_counts = self.database.classify_service_tiers(
@@ -718,6 +725,12 @@ class SessionScanner:
                 coverage_start_utc=trace.coverage_start_utc,
                 coverage_end_utc=trace.coverage_end_utc,
             )
+            classified_at = perf_counter()
+
+            self.database.capture_price_snapshots()
+            snapshots_finished_at = perf_counter()
+            self._scan_titles()
+            titles_finished_at = perf_counter()
 
             finished = datetime.now(UTC)
             result = ScanResult(
@@ -733,8 +746,18 @@ class SessionScanner:
                 tier_counts=tier_counts,
                 incremental_files=incremental_files,
                 skipped_copied_events=skipped_copied_events,
+                # Measure completed scan work, excluding lock wait and the write
+                # of this timing record itself. Wall-clock adjustments must not
+                # affect elapsed durations.
+                duration_seconds=titles_finished_at - scan_started,
+                timings_seconds={
+                    "discovery": discovered_at - scan_started,
+                    "session_files": files_finished_at - discovered_at,
+                    "priority_trace": trace_finished_at - files_finished_at,
+                    "classify_service_tiers": classified_at - trace_finished_at,
+                    "price_snapshots": snapshots_finished_at - classified_at,
+                    "session_titles": titles_finished_at - snapshots_finished_at,
+                },
             )
             self.database.set_metadata("last_scan", json.dumps(result.to_dict()))
-            self.database.capture_price_snapshots()
-            self._scan_titles()
             return result
