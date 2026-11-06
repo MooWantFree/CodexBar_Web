@@ -8,6 +8,7 @@ import { formatNumber, quotaWindowLabel } from "../../lib/format";
 import { EmptyState, ErrorNotice, Pager } from "../../components/Shared";
 import { LoadingStatus, UsageSkeleton, UsageTableSkeleton } from "../../components/UsageSkeleton";
 import { HistoryNotice, historyContext, planLabel, valueTime, percent, valueMoney } from "./QuotaShared";
+import { QuotaUsageChart } from "./QuotaUsageChart";
 import "../quotaMessages";
 
 const conversionNotes = [
@@ -175,8 +176,10 @@ export function QuotaValuePage() {
       <div className="panel-heading"><h2 id="quotaValueHistoryDetailTitle">{detailReport ? t("{window} · cycle reading details", { window: quotaWindowLabel(detailReport.cycle) }) : t("Cycle reading details")}</h2><button type="button" className="button ghost" onClick={closeDetail}>{t("Hide details")}</button></div>
       <p id="quotaValueHistoryDetailStatus" className="fine-print" role="status">{detailLoading ? <UsageSkeleton className="usage-line-skeleton" /> : detailReport ? t("{context} · cycle start {start} · scheduled reset {reset} · {count} saved readings · {cycle}", { context: historyContext({ ...quota, ...detailReport, status: quota?.status }), start: valueTime(detailReport.cycle.cycle_start_at), reset: valueTime(detailReport.cycle.resets_at), count: formatNumber(detailReport.observations.length), cycle: t(quota?.status === "ready" && detailReport.cycle.is_current ? "Current cycle" : "Historical cycle; its last reading is not final usage at reset") }) : ""}</p>
       <ErrorNotice error={detail.error} />
-      <p className="fine-print">{t("Readings show saved amounts in reverse chronological order. Values per 1%, for 100%, and for remaining quota use that reading's proportions.")}</p>
+      {detailLoading ? <UsageSkeleton className="quota-usage-chart-skeleton" /> : detailReport && <QuotaUsageChart key={`chart:${detailIdentity}`} observations={detailReport.observations} />}
+      {detailReport && <details key={`list:${detailIdentity}`} className="quota-value-reading-list"><summary>{t("Reading list")}</summary>
       <div className="table-wrap quota-value-observations-wrap"><table><thead><tr>{observationHeaders.map(header => <th scope="col" key={header}>{t(header)}</th>)}</tr></thead><tbody id="quotaValueObservationTable">{detailLoading ? <UsageTableSkeleton columns={observationHeaders.length} /> : (detailReport?.observations || []).map((row, index) => <tr key={`${row.fetched_at}-${index}`}><td>{valueTime(row.fetched_at)}</td><td>{percent(row.used_percent)}</td><td>{valueMoney(row.total?.api_usd_known)}</td><td>{valueMoney(row.usd_per_percent)}</td><td>{valueMoney(row.full_quota_usd)}</td><td>{valueMoney(row.remaining_quota_usd)}</td><td className="quota-value-observation-note">{observationNotes(row) || "—"}</td></tr>)}{!detailLoading && detailReport && !detailReport.observations.length && <tr><td colSpan="7" className="empty-state">{t("No snapshots are available for this cycle.")}</td></tr>}</tbody></table></div>
+      </details>}
     </section></>}
   </section>;
 }

@@ -83,6 +83,17 @@ describe("quota saved history", () => {
     expect(document.querySelector(".reset-selection").textContent).toContain("Last successful read");
     fireEvent.click(screen.getByText("View readings"));
     await waitFor(() => expect(document.querySelector("#quotaValueObservationTable").textContent).toContain("$8"));
+    expect(screen.getByRole("img", { name: "Quota usage over time" })).toBeTruthy();
+    const readingList = document.querySelector(".quota-value-reading-list");
+    expect(readingList.open).toBe(false);
+    expect(document.querySelector("#quotaValueObservationTable").closest("details")).toBe(readingList);
+    fireEvent.click(screen.getByText("Reading list"));
+    expect(readingList.open).toBe(true);
+    expect(screen.getByRole("columnheader", { name: "Read time" })).toBeTruthy();
+    fireEvent.click(document.querySelector("#quotaValueHistoryDetail button"));
+    fireEvent.click(screen.getByText("View readings"));
+    await screen.findByRole("img", { name: "Quota usage over time" });
+    expect(document.querySelector(".quota-value-reading-list").open).toBe(false);
     expect(document.querySelector("#quotaValueHistoryDetailStatus").textContent).toContain("last reading is not final usage at reset");
   });
 
