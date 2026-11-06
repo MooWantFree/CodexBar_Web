@@ -78,7 +78,7 @@ describe("quota saved history", () => {
     expect(document.querySelector("#quotaValueTitle").textContent).toBe("Last saved conversion");
     expect(document.querySelector("#quotaValueWindows").textContent).toContain("Saved quota reading");
     expect(document.querySelector("#quotaValueWindows").textContent).toContain("$8");
-    expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("Historical cycle");
+    expect(document.querySelector("#quotaValueHistoryTable").textContent).toContain("Plus");
     expect(document.querySelector("#quotaValueHistoryTable").textContent).not.toContain("Current cycle");
     expect(document.querySelector(".reset-selection").textContent).toContain("Last successful read");
     fireEvent.click(screen.getByText("View readings"));

@@ -70,6 +70,7 @@ if (globalThis.document?.documentElement) document.documentElement.lang = locale
 
 addMessages({
   en: {
+    '已包含 Fast API 加价': 'Includes Fast API surcharge',
     "开启导航": "Open navigation", "打开导航": "Open navigation", "关闭导航": "Close navigation", "主导航": "Main navigation",
     "用量总览": "Usage overview", "每日明细": "Daily usage", "项目用量": "Project usage", "会话用量": "Session usage",
     "模型定价": "Model pricing", "重置日期": "Reset history", "额度等价美元": "Quota value in USD",
@@ -89,6 +90,7 @@ addMessages({
     "加载中…": "Loading…", "正在加载…": "Loading…", "读取中…": "Loading…", "加载失败": "Failed to load", "读取失败": "Failed to load", "重试": "Retry", "刷新": "Refresh", "暂无数据": "No data", "日志目录": "Log directory", "日志目录：": "Log directory: ", "不保存消息正文 · 不上传数据 · 只监听本机": "No message content stored · No uploads · Local access only",
   },
   ja: {
+    '已包含 Fast API 加价': 'Fast API 追加料金を含む',
     "开启导航": "ナビゲーションを開く", "打开导航": "ナビゲーションを開く", "关闭导航": "ナビゲーションを閉じる", "主导航": "メインナビゲーション",
     "用量总览": "使用量の概要", "每日明细": "日別の使用量", "项目用量": "プロジェクトの使用量", "会话用量": "セッションの使用量",
     "模型定价": "モデル料金", "重置日期": "リセット履歴", "额度等价美元": "利用枠のドル換算",

@@ -31,7 +31,7 @@ export default function OverviewPage() {
       <small>{loading ? <UsageSkeleton className="usage-kpi-detail"/> : detail}</small>
     </article>)}</section>
     <TrendPair report={query.data} loading={loading}/>
-    <section className="panel table-panel"><div className="panel-heading model-heading"><div><p className="eyebrow">{t('模型汇总')}</p><h2>{t('按模型统计')}</h2></div>
+    <section className="panel table-panel"><div className="panel-heading model-heading"><h2>{t('按模型统计')}</h2>
       <div id="modelLegend" className="legend model-legend" aria-label={t('模型图例')}>{loading
         ? [0, 1, 2].map(index => <UsageSkeleton key={index} className="usage-model-legend"/>)
         : models.map(row => <span key={row.key}><i style={{background: modelColor(row.key)}}/>{modelName(row)}</span>)}</div>

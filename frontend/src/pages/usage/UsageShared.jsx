@@ -92,7 +92,7 @@ export function TrendPair({report, nested = false, prefix = '', loading = false}
     {['total_tokens', 'api_usd_known'].map((metric, index) => {
       const title = t(index === 0 ? '{grain} Token · 按模型' : '{grain} API 等价美元 · 按模型', {grain});
       return <article key={metric} className={nested ? undefined : 'panel chart-panel'}>
-        {nested ? <h3>{title}</h3> : <div className="panel-heading"><div><p className="eyebrow">{t(index === 0 ? 'TOKEN 趋势' : '成本趋势')}</p><h2>{title}</h2></div></div>}
+        {nested ? <h3>{title}</h3> : <div className="panel-heading"><h2>{title}</h2></div>}
         <div id={prefix ? `${prefix}${index ? 'CostChart' : 'TokenChart'}` : index ? 'costChart' : 'tokenChart'} className={`daily-chart ${range.grain === 'hourly' ? 'hourly-chart' : ''}`}>
           {loading ? <UsageChartSkeleton/> : <StackedChart rows={rows} metric={metric}/>}
         </div>

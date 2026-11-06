@@ -14,8 +14,8 @@ import "../quotaMessages";
 const conversionNotes = [
   "Dollars per 1% = period API-equivalent amount ÷ used percentage. Full window estimate = dollars per 1% × 100. Estimates use this cycle's model and Fast mix and change with usage.",
   "Window ranges may overlap; view their amounts separately. Amounts come from local calls in this log directory, whose account ownership cannot be verified. Other devices and cloud usage are excluded. This is an API-equivalent estimate, not a subscription bill or a purchase price for quota.",
-  "Unpriced calls are excluded. Known amounts still estimate 1%, the full window, and remaining quota and are marked accordingly. Refresh and convert scans new logs and reads quota; changing pages reuses the latest reading.",
-  "Every successful quota read saves both pricing bases. Historical amounts never recalculate after price changes and remain after source logs are deleted. Failed live reads show saved history; an unidentified account uses the last saved account with an offline label. Unrecorded historical cycles cannot be reconstructed.",
+  "Unpriced calls are excluded. Estimates use known amounts only.",
+  "Historical amounts stay as read after price changes or source log deletion. Unrecorded cycles cannot be reconstructed.",
 ];
 
 function QuotaValueTooltip({ paragraphs, label }) {
@@ -51,10 +51,10 @@ function QuotaValueCard({ window, report, saved }) {
     <div className="panel-heading"><div className="quota-value-window-title"><h2>{quotaWindowLabel(window)}</h2>{window.window_minutes === 10080 && <QuotaValueTooltip label={t("Conversion basis")} paragraphs={conversionNotes.map(note => t(note))} />}</div><span className={`reset-badge${window.cycle_start_estimated ? " estimated" : ""}`}>{t(window.cycle_start_at ? window.cycle_start_estimated ? "Estimated start" : "Confirmed start" : "Unknown start")}</span></div>
     <div className="quota-value-range"><span>{t("Cycle start")} <strong>{valueTime(window.cycle_start_at)}</strong></span><span>{t("Reporting cutoff time")} <strong>{valueTime(report.fetched_at)}</strong></span><span>{t(saved ? "Scheduled reset at that reading" : "Next reset")} <strong>{valueTime(window.resets_at)}</strong></span></div>
     <dl className="quota-value-metrics">
-      <div><dt>{t("Quota used during the period")}</dt><dd>{percent(window.used_percent)}</dd><small>{t(saved ? "Saved quota reading" : "Server quota reading")}</small></div>
+      <div><dt>{t("Quota used during the period")}</dt><dd>{percent(window.used_percent)}</dd>{saved && <small>{t("Saved quota reading")}</small>}</div>
       <div><dt>{t(partial ? "Known API-equivalent amount" : "API-equivalent amount")}</dt><dd>{valueMoney(total?.api_usd_known)}</dd><small>{coverage}</small></div>
-      <div><dt>{t(partial ? "Known amount estimate per 1%" : "Equivalent dollars per 1%")}</dt><dd>{valueMoney(window.usd_per_percent)}</dd><small>{t(partial ? "Known amount ÷ used percentage" : "Period amount ÷ used percentage")}</small></div>
-      <div><dt>{t("Full window (100%) estimate")}</dt><dd>{valueMoney(window.full_quota_usd)}</dd><small>{t(partial ? "Extrapolated from known amounts" : saved ? "Extrapolated from samples at that reading" : "Extrapolated from current samples")}</small></div>
+      <div><dt>{t(partial ? "Known amount estimate per 1%" : "Equivalent dollars per 1%")}</dt><dd>{valueMoney(window.usd_per_percent)}</dd></div>
+      <div><dt>{t("Full window (100%) estimate")}</dt><dd>{valueMoney(window.full_quota_usd)}</dd>{partial && <small>{t("Extrapolated from known amounts")}</small>}</div>
     </dl>
   </article>;
 }
@@ -150,7 +150,7 @@ export function QuotaValuePage() {
   function closeDetail() { setSelection(null); detailTrigger.current?.focus(); }
   return <section className="page" data-page="quota-value">
     <section className="panel quota-value-intro">
-      <div className="panel-heading quota-value-heading"><div><p className="eyebrow">{t("QUOTA VALUE")}</p><div className="quota-value-window-title"><h2 id="quotaValueTitle">{t(saved ? "Last saved conversion" : "Current cycle conversion")}</h2><QuotaValueTooltip label={t(saved ? "Last saved conversion" : "Current cycle conversion")} paragraphs={[t("API-equivalent dollars are calculated from each window's cycle start through the quota reading time. Estimated start = next reset time − window duration."), status]} /></div></div><div className="quota-value-actions"><label className="price-mode-control"><span>{t("Pricing basis")}</span><select id="quotaValuePriceMode" value={mode} disabled={busy} onChange={event => { setSelection(null); setPage(0); setRange({ priceMode: event.target.value }); }}><option value="snapshot">{t("Saved price estimate")}</option><option value="current">{t("Recalculate at current prices")}</option></select></label><button type="button" id="refreshQuotaValueButton" className="button" disabled={busy} onClick={refresh}>{t(refreshing ? "Refreshing…" : quotaLoading || quotaRefreshing ? "Reading…" : "Refresh and convert")}{busy && <UsageSkeleton className="usage-inline-skeleton" style={{ display: "inline-block", width: 24, height: 8, marginLeft: 8, verticalAlign: "middle" }} />}</button></div></div>
+      <div className="panel-heading quota-value-heading"><div className="quota-value-window-title"><h2 id="quotaValueTitle">{t(saved ? "Last saved conversion" : "Current cycle conversion")}</h2><QuotaValueTooltip label={t(saved ? "Last saved conversion" : "Current cycle conversion")} paragraphs={[t("API-equivalent dollars are calculated from each window's cycle start through the quota reading time. Estimated start = next reset time − window duration."), status]} /></div><div className="quota-value-actions"><label className="price-mode-control"><span>{t("Pricing basis")}</span><select id="quotaValuePriceMode" value={mode} disabled={busy} onChange={event => { setSelection(null); setPage(0); setRange({ priceMode: event.target.value }); }}><option value="snapshot">{t("Saved price estimate")}</option><option value="current">{t("Recalculate at current prices")}</option></select></label><button type="button" id="refreshQuotaValueButton" className="button" disabled={busy} onClick={refresh}>{t(refreshing ? "Refreshing…" : quotaLoading || quotaRefreshing ? "Reading…" : "Refresh and convert")}{busy && <UsageSkeleton className="usage-inline-skeleton" style={{ display: "inline-block", width: 24, height: 8, marginLeft: 8, verticalAlign: "middle" }} />}</button></div></div>
       <HistoryNotice quota={quota} />
       <p id="quotaValueStatus" className="sr-only" role="status">{status}</p>
       {actionError && <ErrorNotice error={actionError} />}{current.error && report && <ErrorNotice error={current.error} />}
@@ -158,13 +158,12 @@ export function QuotaValuePage() {
     <div id="quotaValueWindows" className="quota-value-windows" aria-busy={busy || current.isFetching}>{currentLoading ? (quota?.windows?.length ? quota.windows : [null, null]).map((window, index) => <QuotaValueCardSkeleton key={index} window={window} />) : report?.windows?.length ? report.windows.map((window, index) => <QuotaValueCard key={`${window.limit_id}-${window.slot}-${index}`} window={window} report={report} saved={saved} />) : <div className="panel"><EmptyState>{systemMessage(report?.message || quota?.message) || current.error?.message || quotaError?.message || t("No convertible percentage quota windows were returned.")}</EmptyState></div>}</div>
     <LoadingStatus loading={historyLoading}>{t("Reading saved account history…")}</LoadingStatus>
     <section id="quotaValueHistoryPanel" className="panel quota-value-history" aria-labelledby="quotaValueHistoryTitle" aria-busy={busy || history.isFetching}>
-      <div className="panel-heading"><div><p className="eyebrow">{t("SAVED HISTORY")}</p><h2 id="quotaValueHistoryTitle">{t("Quota value history")}</h2></div></div>
+      <div className="panel-heading"><h2 id="quotaValueHistoryTitle">{t("Quota value history")}</h2></div>
       <ErrorNotice error={history.error} />
       <div className="table-wrap quota-value-history-table-wrap"><table className="quota-value-history-table"><thead><tr>{historyHeaders.map(header => <th scope="col" key={header}>{t(header)}</th>)}</tr></thead><tbody id="quotaValueHistoryTable">{historyLoading ? <UsageTableSkeleton columns={historyHeaders.length} /> : cycles.map(cycle => {
         const selected = cycle.id === selectedID;
-        const isCurrent = quota?.status === "ready" && cycle.is_current;
         return <tr key={cycle.id} className={selected ? "selected" : undefined}>
-          <td><strong>{quotaWindowLabel(cycle)}</strong><small>{planLabel(cycle)} <span className={`coverage${isCurrent ? "" : " partial"}`}>{t(isCurrent ? "Current cycle" : "Historical cycle")}</span></small></td>
+          <td><strong>{quotaWindowLabel(cycle)}</strong><small>{planLabel(cycle)}</small></td>
           <td>{valueTime(cycle.cycle_start_at)}</td>
           <td className="quota-value-primary">{percent(cycle.used_percent)}</td><td className="quota-value-primary">{valueMoney(cycle.total?.api_usd_known)}{cycle.total?.unknown_price_calls > 0 && <small className="unknown">{t("Known amounts only")}</small>}</td><td>{valueTime(cycle.fetched_at)}</td><td>{valueMoney(cycle.usd_per_percent)}</td><td>{valueMoney(cycle.full_quota_usd)}</td><td>{formatNumber(cycle.observation_count)}</td>
           <td><button type="button" className="button ghost" disabled={busy || history.isFetching} aria-controls="quotaValueHistoryDetail" aria-expanded={selected} onClick={event => { detailTrigger.current = event.currentTarget; setSelection(selected ? null : { identity: historyIdentity, id: cycle.id }); }}>{t(selected ? "Hide details" : "View readings")}</button></td>

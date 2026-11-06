@@ -37,9 +37,8 @@ body.service-offline { overflow: hidden; }
 }
 .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 28px; }
 .brand-mark { display: block; flex: none; width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 8px 20px rgba(39,122,217,.22); }
-.brand strong, .brand small { display: block; }
+.brand strong { display: block; }
 .brand strong { font-size: 14px; }
-.brand small { margin-top: 3px; color: var(--muted); font-size: 9px; letter-spacing: .12em; }
 .nav-list { display: grid; gap: 5px; }
 .nav-divider { height: 1px; margin: 9px 12px; background: var(--border); }
 .nav-list a { display: flex; align-items: center; gap: 11px; padding: 11px 12px; color: #4b586d; border-radius: 9px; text-decoration: none; font-size: 13px; font-weight: 600; transition: .15s ease; }
@@ -57,11 +56,9 @@ body.service-offline { overflow: hidden; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 24px; }
 .topbar > :first-child { min-width: 0; }
 h1, h2, h3, p { margin-top: 0; }
-h1 { margin-bottom: 7px; font-size: clamp(29px, 3.2vw, 42px); letter-spacing: -.04em; }
+h1 { margin-bottom: 0; font-size: clamp(29px, 3.2vw, 42px); letter-spacing: -.04em; }
 h2 { margin-bottom: 0; font-size: 18px; letter-spacing: -.02em; }
 h3 { margin: 0 0 16px; font-size: 13px; }
-.subtitle { margin-bottom: 0; color: var(--muted); font-size: 15px; }
-.eyebrow { margin-bottom: 8px; color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .17em; }
 .header-actions { display: flex; align-items: center; gap: 10px; min-width: 0; max-width: 55%; }
 .header-actions > button { flex-shrink: 0; white-space: nowrap; }
 .log-directory-chip { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: min(420px, 40vw); padding: 8px 12px; color: #397458; border: 1px solid #cde7d8; background: #f1faf5; border-radius: 999px; font-size: 11px; }
@@ -235,7 +232,7 @@ input[type="date"], select { color: var(--text); border: 1px solid var(--border)
 .price-facts span, .price-facts strong { font-size: 11px; }.price-facts span { color: var(--muted); }
 .fine-print { color: var(--muted); font-size: 11px; line-height: 1.65; }
 .source-link { color: var(--blue); font-size: 11px; text-decoration: none; }.source-link:hover { text-decoration: underline; }
-.pricing-table-wrap { max-height: 520px; margin-top: 5px; }.pricing-table th, .pricing-table td { padding: 9px 8px; }
+.pricing-table-wrap { position: relative; max-height: 520px; margin-top: 5px; }.pricing-table th, .pricing-table td { padding: 9px 8px; }
 .pricing-table td:first-child strong, .pricing-table td:first-child small, .project-name strong, .project-name small { display: block; }
 .pricing-table td:first-child small, .project-name small { max-width: 310px; margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; }
 .pricing-table input { width: 90px; color: var(--text); border: 1px solid var(--border); background: white; border-radius: 7px; padding: 7px 8px; text-align: right; }
@@ -321,7 +318,6 @@ th:first-child, td:first-child { text-align: left; } tbody tr:hover { background
 .reset-record-detail small { font-size: 10px; color: var(--muted); }
 .reset-badge { flex: none; padding: 5px 8px; border-radius: 6px; background: #edf8f2; color: #287752; font-size: 10px; }
 .reset-badge.estimated { background: #fff5e8; color: #9a5b13; }
-.reset-record-action { color: var(--blue); font-size: 11px; flex: none; }
 .reset-record-skeleton { display: grid; gap: 9px; min-height: 88px; padding: 20px 16px; border: 1px solid var(--border); border-radius: 10px; }
 .reset-record-skeleton .quota-skeleton:first-child { width: 40%; height: 13px; }
 .reset-record-skeleton .quota-skeleton:last-child { width: 70%; height: 10px; }
@@ -434,7 +430,6 @@ code { color: #53647c; }
   .reset-panel { padding: 16px; }
   .reset-record { flex-wrap: wrap; gap: 10px; padding: 14px; }
   .reset-record-detail { flex-basis: calc(100% - 36px); order: 1; padding-left: 33px; }
-  .reset-record-action { display: none; }
   .reset-badge { margin-left: auto; }
   .app-main { padding-inline: 13px; }
   .topbar { flex-direction: column; gap: 16px; }.header-actions { flex-wrap: wrap; width: 100%; max-width: 100%; }

@@ -54,7 +54,7 @@ export default function SettingsPage() {
   const loadingDirectory = settings.isPending && !directory && !dirty;
   return <><LoadingStatus loading={settings.isPending}/><section className="page settings-page" data-page="settings">
     <section className="panel settings-panel" aria-labelledby="settingsHeading">
-      <div className="panel-heading"><div><p className="eyebrow">{t('APPLICATION SETTINGS')}</p><h2 id="settingsHeading">{t('日志与界面')}</h2></div></div>
+      <div className="panel-heading"><h2 id="settingsHeading">{t('日志与界面')}</h2></div>
       <form className="settings-form" onSubmit={save}>
         <div className="settings-field">
           <label htmlFor="codexHomeInput">{t('Codex 日志目录')}</label>
@@ -63,7 +63,7 @@ export default function SettingsPage() {
               {loadingDirectory && <UsageSkeleton className="usage-settings-directory"/>}</div>
             <button type="button" className="button" disabled={busy || loadingDirectory} onClick={selectFolder}>{t(selecting ? '正在选择…' : '选择文件夹')}{selecting && <UsageSkeleton className="usage-inline-skeleton"/>}</button>
           </div>
-          <p id="codexHomeHint" className="fine-print">{t('手动填写或选择本机文件夹，目录需包含 sessions、archived_sessions 或 logs_2.sqlite。点击保存后自动扫描，已有历史记录继续保留。')}</p>
+          <p id="codexHomeHint" className="fine-print">{t('目录需包含 sessions、archived_sessions 或 logs_2.sqlite。已有历史记录会保留。')}</p>
           {settings.data?.codex_home_exists === false && <p className="fine-print unknown">{t('当前日志目录不存在，请选择有效目录。')}</p>}
           {settings.isPending && <UsageSkeleton className="usage-line-skeleton"/>}
         </div>
@@ -72,10 +72,9 @@ export default function SettingsPage() {
       </form>
       <div className="settings-field settings-language">
         <label htmlFor="languageSelect">{t('显示语言')}</label>
-        <select id="languageSelect" value={language} aria-describedby="languageHint" onChange={event => setLanguagePreference(event.target.value)}>
+        <select id="languageSelect" value={language} onChange={event => setLanguagePreference(event.target.value)}>
           <option value="auto">{t('跟随浏览器')}</option><option value="en">English</option><option value="ja">日本語</option><option value="zh">中文 (Chinese)</option>
         </select>
-        <p id="languageHint" className="fine-print">{t('语言切换立即生效，选择保存在当前浏览器中。')}</p>
       </div>
     </section>
     <PricingPage />

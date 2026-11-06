@@ -74,7 +74,7 @@ describe('price basis hover explanations', () => {
     ['/sessions', 'sessions', {inferred_price_calls: 11, sessions: [{inferred_price_calls: 50}]}, 11],
   ])('uses the existing %s report cache without fetching or adding a query observer', (path, key, report, count) => {
     const {client} = mount(path, {seed: cache => cache.setQueryData([key, 'range-a'], report)});
-    expect(note().textContent).toBe('Saved price snapshots · Includes Fast API surcharge');
+    expect(note().textContent).toBe('Includes Fast API surcharge');
     expect(note().title).toContain(`${count} calls use prices backfilled at first collection`);
     expect(note().title).toContain('the official price at the time of the call cannot be confirmed');
     expect(screen.queryByText(/calls use prices backfilled/)).toBeNull();
@@ -124,7 +124,7 @@ describe('price basis hover explanations', () => {
   it('explains current prices without snapshot backfill details', () => {
     dashboard.current = {...dashboard.current, range: {...dashboard.current.range, priceMode: 'current'}};
     mount('/sessions', {seed: cache => cache.setQueryData(['sessions', 'range-a'], {inferred_price_calls: 7})});
-    expect(note().textContent).toBe('Recalculated at current prices · Includes Fast API surcharge');
+    expect(note().textContent).toBe('Includes Fast API surcharge');
     expect(note().title).toContain('current effective prices');
     expect(note().title).not.toContain('backfilled');
     expect(note().title).not.toContain('Snapshot estimate');
@@ -135,6 +135,6 @@ describe('price basis hover explanations', () => {
     act(() => setLanguagePreference('ja'));
     expect(note().title).toContain('3 回の呼び出しは初回収集時の価格で補完されています');
     expect(note().title).toContain('呼び出し時点の公式価格は確認できません');
-    expect(note().textContent).toBe('保存された価格スナップショットで推計 · Fast API追加料金を含む');
+    expect(note().textContent).toBe('Fast API 追加料金を含む');
   });
 });

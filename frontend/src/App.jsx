@@ -32,13 +32,13 @@ addMessages({
 });
 
 const routes = [
-  {path: '/overview', title: '用量总览', eyebrow: 'USAGE OVERVIEW', subtitle: 'Token、模型与 API 等价成本概览。', icon: '◫', component: OverviewPage},
-  {path: '/daily', title: '每日明细', eyebrow: 'DAILY LEDGER', subtitle: '逐日核对调用、Token 与等价成本。', icon: '≡', component: DailyPage},
-  {path: '/projects', title: '项目用量', eyebrow: 'PROJECT USAGE', subtitle: '按 Git 项目查看总量与每日使用情况。', icon: '◇', component: ProjectsPage},
-  {path: '/sessions', title: '会话用量', eyebrow: 'SESSION USAGE', subtitle: '查看会话排行、用量趋势与每次调用。', icon: '▤', component: SessionsPage},
-  {path: '/resets', title: '重置日期', eyebrow: 'RESET HISTORY', subtitle: '查看重置时间，选择两个时刻统计期间用量。', icon: '↻', component: ResetsPage},
-  {path: '/quota-value', title: '额度等价美元', eyebrow: 'QUOTA VALUE', subtitle: '从本周期已用额度，推算每 1% 和整窗额度的 API 等价美元。', icon: '≈', component: QuotaValuePage},
-  {path: '/settings', title: '设置', eyebrow: 'SETTINGS', subtitle: '管理日志目录、界面语言和模型价格。', icon: '⚙', component: SettingsPage},
+  {path: '/overview', title: '用量总览', icon: '◫', component: OverviewPage},
+  {path: '/daily', title: '每日明细', icon: '≡', component: DailyPage},
+  {path: '/projects', title: '项目用量', icon: '◇', component: ProjectsPage},
+  {path: '/sessions', title: '会话用量', icon: '▤', component: SessionsPage},
+  {path: '/resets', title: '重置日期', icon: '↻', component: ResetsPage},
+  {path: '/quota-value', title: '额度等价美元', icon: '≈', component: QuotaValuePage},
+  {path: '/settings', title: '设置', icon: '⚙', component: SettingsPage},
 ];
 
 const inferredCount = value => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 0;
@@ -64,7 +64,7 @@ export function AnalysisControls() {
     !currentPrices && inferred > 0 && t('快照估算 · {count} 次调用使用首次采集价格回填', {count: formatNumber(inferred)}),
     !currentPrices && inferred > 0 && t('首次采集回填属于估算，无法确认调用当时的官方价格。'),
   ].filter(Boolean).join('\n');
-  return <div className="analysis-controls"><p className="fine-print price-basis-note" title={tooltip}>{t(currentPrices ? '按当前价格重算 · 已包含 Fast API 加价' : '按调用时已保存的价格估算 · 已包含 Fast API 加价')}</p>
+  return <div className="analysis-controls"><p className="fine-print price-basis-note" title={tooltip}>{t('已包含 Fast API 加价')}</p>
     <div className="analysis-options"><label className="price-mode-control"><span>{t('价格口径')}</span><select value={range.priceMode} onChange={event => setRange({priceMode: event.target.value})}><option value="snapshot">{t('快照估算')}</option><option value="current">{t('当前价格重算')}</option></select></label>
       <div className="grain-switch" role="group" aria-label={t('统计粒度')}>{['daily', 'hourly'].map(grain => <button key={grain} aria-pressed={range.grain === grain} onClick={() => setRange({grain})}>{t(grain === 'daily' ? '按天' : '按小时')}</button>)}</div>
     </div></div>;
@@ -97,9 +97,9 @@ export default function App() {
   return <>
     <button ref={menuButton} className="menu-toggle" aria-label={t(menuOpen ? '关闭导航' : '打开导航')} aria-controls="sidebar" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}>☰</button>
     <button className="sidebar-backdrop" hidden={!menuOpen} aria-label={t('关闭导航')} onClick={() => setMenuOpen(false)} />
-    <aside id="sidebar" className="sidebar" aria-label={t('主导航')}><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}logo.svg`} width="34" height="34" alt="" /><div><strong>Codex Report</strong><small>{t('LOCAL ANALYTICS')}</small></div></div>
+    <aside id="sidebar" className="sidebar" aria-label={t('主导航')}><div className="brand"><img className="brand-mark" src={`${import.meta.env.BASE_URL}logo.svg`} width="34" height="34" alt="" /><strong>Codex Report</strong></div>
       <nav className="nav-list" aria-label={t('导航')}>{routes.map(item => <div className="nav-item" key={item.path}>{item.path === '/settings' && <div className="nav-divider" role="separator" />}<NavLink to={`${item.path}?${queryString()}`}><span aria-hidden="true">{item.icon}</span>{t(item.title)}</NavLink></div>)}</nav><div className="sidebar-foot"><QuotaSidebar /></div></aside>
-    <main className="app-main"><header className="topbar"><div><p className="eyebrow">{t(route.eyebrow)}</p><h1>{t(route.title)}</h1><p className="subtitle">{t(route.subtitle)}</p></div><div className="header-actions"><span className="log-directory-chip" title={codexHome} aria-label={`${t('日志目录')}：${codexHome}`}><span className="dot" /><span className="log-directory-label">{t('日志目录')}</span><code>{codexHome}</code></span>{route.path !== '/resets' && <button className="button primary" disabled={scanning} onClick={() => scan().catch(() => {})}>{t(scanning ? '扫描中…' : '扫描新日志')}{scanning && <UsageSkeleton className="usage-inline-skeleton"/>}</button>}</div></header>
+    <main className="app-main"><header className="topbar"><div><h1>{t(route.title)}</h1></div><div className="header-actions"><span className="log-directory-chip" title={codexHome} aria-label={`${t('日志目录')}：${codexHome}`}><span className="dot" /><span className="log-directory-label">{t('日志目录')}</span><code>{codexHome}</code></span>{route.path !== '/resets' && <button className="button primary" disabled={scanning} onClick={() => scan().catch(() => {})}>{t(scanning ? '扫描中…' : '扫描新日志')}{scanning && <UsageSkeleton className="usage-inline-skeleton"/>}</button>}</div></header>
       {showRange && <section className="control-panel panel"><DateControls key={location.key} /><AnalysisControls /></section>}<ErrorNotice error={scanError} />
       <PageErrorBoundary key={route.path}><Routes><Route path="/" element={<Navigate to={`/overview${location.search}`} replace />} /><Route path="/pricing" element={<Navigate to={`/settings${location.search}`} replace />} />{routes.map(item => <Route key={item.path} path={item.path} element={<item.component />} />)}<Route path="*" element={<Navigate to={`/overview${location.search}`} replace />} /></Routes></PageErrorBoundary>
     </main>

@@ -48,10 +48,10 @@ export default function ProjectsPage() {
     <ErrorNotice error={query.error}/>
     <section className="charts-grid project-summary-charts" ref={chartsRef}>
       {['total_tokens', 'api_usd_known'].map((metric, index) => <article key={metric} className="panel chart-panel"><div className="panel-heading"><div>
-        <p className="eyebrow">{t(index ? '项目成本' : '项目总量')}</p><h2>{t(index ? '项目 API 等价成本' : '项目总使用量')}</h2>
+        <h2>{t(index ? '项目 API 等价成本' : '项目总使用量')}</h2>
       </div></div><ProjectChart rows={rows} metric={metric} selected={selectedKey} onSelect={select} loading={loading}/></article>)}
     </section>
-    <section className="panel table-panel"><div className="panel-heading"><div><p className="eyebrow">{t('项目明细')}</p><h2>{t('项目汇总')}</h2></div></div><div className="table-wrap"><table>
+    <section className="panel table-panel"><div className="panel-heading"><h2>{t('项目汇总')}</h2></div><div className="table-wrap"><table>
       <SortableHead columns={PROJECT_COLUMNS} sort={sort} onSort={setSort}/><tbody id="projectTable">{loading ? <UsageTableSkeleton columns={PROJECT_COLUMNS.length}/> : sorted.map(row => <tr key={row.key} className={row.key === selectedKey ? 'selected' : ''} onClick={() => select(row.key)}>
         <td className="project-name"><button type="button" className="session-pick" aria-pressed={row.key === selectedKey}>{projectName(row)}</button><small title={row.path || ''}>{row.path || t('无法识别项目路径')}</small></td>
         <td>{formatNumber(row.calls)}</td><td>{formatNumber(row.fast_calls)}</td><td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td>
@@ -59,7 +59,7 @@ export default function ProjectsPage() {
       </tr>)}{!loading && !rows.length && <tr><td colSpan={10}><EmptyState>{t('暂无数据')}</EmptyState></td></tr>}</tbody>
     </table></div></section>
     <section id="projectDetail" className="panel project-detail-panel" tabIndex={-1} ref={detailRef} aria-busy={loading || detail.isFetching}>
-      <div className="panel-heading project-selector-heading"><div><p className="eyebrow">{t('项目趋势')}</p><h2 id="selectedProjectTitle">{detailLoading ? <UsageSkeleton className="usage-heading-skeleton"/> : detail.data ? t('{name} · 用量趋势', {name: projectName(detail.data.project)}) : t('项目用量趋势')}</h2>
+      <div className="panel-heading project-selector-heading"><div><h2 id="selectedProjectTitle">{detailLoading ? <UsageSkeleton className="usage-heading-skeleton"/> : detail.data ? t('{name} · 用量趋势', {name: projectName(detail.data.project)}) : t('项目用量趋势')}</h2>
         <small id="selectedProjectPath" className="path-label">{detailLoading ? <UsageSkeleton className="usage-line-skeleton"/> : detail.data?.project.path || (selectedKey ? t('无法识别项目路径') : '')}</small></div>
         <label>{t('选择项目')}{loading ? <UsageSkeleton className="usage-field-skeleton"/> : <select id="projectSelect" value={selectedKey || ''} disabled={!rows.length} onChange={event => setSelected(event.target.value)}>
           {!rows.length && <option value="">{t('请先选择项目')}</option>}{rows.map(row => <option key={row.key} value={row.key}>{projectName(row)} — {formatCompact(row.total_tokens)}</option>)}

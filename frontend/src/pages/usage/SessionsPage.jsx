@@ -70,7 +70,7 @@ function SessionDetail({selection, detailRef, awaitingSelection = false}) {
     {' · '}{t('价格覆盖 {percent}%', {percent: fixed(total.price_coverage_percent)})}
     {' · '}{t('档位覆盖 {percent}%', {percent: fixed(total.tier_coverage_percent)})}</> : t('选择一个会话查看每次调用。');
   return <><LoadingStatus loading={loading && !awaitingSelection}/><section id="sessionDetail" className="panel table-panel" ref={detailRef} tabIndex={-1} aria-busy={awaitingSelection || query.isFetching}>
-    <div className="panel-heading"><div><p className="eyebrow">{t('会话明细标题')}</p><h2 id="sessionDetailTitle">{loading ? <UsageSkeleton className="usage-heading-skeleton"/> : report ? t('{title} · {scope}', {title: sessionTitle(report.session), scope: t(selection.scope === 'tree' && report.session.has_children ? '会话合计' : '自身用量')}) : t('会话明细')}</h2><p id="sessionDetailSummary" className="fine-print">{summary}</p></div></div>
+    <div className="panel-heading"><div><h2 id="sessionDetailTitle">{loading ? <UsageSkeleton className="usage-heading-skeleton"/> : report ? t('{title} · {scope}', {title: sessionTitle(report.session), scope: t(selection.scope === 'tree' && report.session.has_children ? '会话合计' : '自身用量')}) : t('会话明细')}</h2><p id="sessionDetailSummary" className="fine-print">{summary}</p></div></div>
     <ErrorNotice error={query.error}/><TrendPair report={report} nested prefix="session" loading={loading}/>
     <div className="table-wrap request-table-wrap"><table><SortableHead columns={REQUEST_COLUMNS} sort={sort} onSort={next => { setSort(next); setPage(0); }}/><tbody id="requestTable">
       {loading ? <UsageTableSkeleton columns={REQUEST_COLUMNS.length} rows={5}/> : <>{total && <tr className="request-total"><td>{t('总计')}</td><td>—</td><td>—</td><td>{formatNumber(total.input_tokens)}</td><td>{formatNumber(total.cached_input_tokens)}</td><td>{formatNumber(total.output_tokens)}</td><td><CostValue row={total} models={report.models}/></td><td><CostValue row={total} kind="fast" models={report.models}/></td><td>—</td></tr>}
@@ -128,13 +128,13 @@ export default function SessionsPage() {
   const ranking = {api_usd_known: 'cost', total_tokens: 'tokens', fast_surcharge_usd: 'fast'}[sort.field] || '';
   return <><LoadingStatus loading={loading}/><section className="page" data-page="sessions">
     <ErrorNotice error={query.error}/>
-    <section className="panel table-panel" aria-busy={query.isFetching}><div className="panel-heading session-heading"><div><p className="eyebrow">{t('会话排行')}</p><h2>{t('会话用量排行')}</h2>
-      <small id="sessionCount" className="fine-print">{loading ? <UsageSkeleton className="usage-line-skeleton"/> : t('{count} 个会话 · 父会话汇总自身及所有子会话 · 用量均在当前筛选区间内', {count: formatNumber(rows.length)})}</small></div>
+    <section className="panel table-panel" aria-busy={query.isFetching}><div className="panel-heading session-heading"><div><h2>{t('会话用量排行')}</h2>
+      <small id="sessionCount" className="fine-print">{loading ? <UsageSkeleton className="usage-line-skeleton"/> : t('{count} 个会话 · 父会话合计包含子会话', {count: formatNumber(rows.length)})}</small></div>
       <div className="session-tools"><label>{t('搜索会话')}<input id="sessionSearch" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t('标题、项目或会话 ID')}/></label>
         <label>{t('排序')}<select id="sessionSort" value={ranking} onChange={event => setSort({field: {cost: 'api_usd_known', tokens: 'total_tokens', fast: 'fast_surcharge_usd'}[event.target.value], direction: 'descending'})}>
           <option value="cost">{t('API 等价成本')}</option><option value="tokens">{t('总 Token')}</option><option value="fast">{t('Fast API 加价')}</option><option value="" disabled>{t('按表头排序')}</option>
         </select></label></div>
-    </div><p className="fine-print">{t('已扫描的调用、Token 和价格快照保存在本地数据库；源日志被清空后仍可查看。新日志需要在清空前完成扫描。')}</p>
+    </div><p className="fine-print">{t('清空源日志前请先扫描；已采集的记录会保留。')}</p>
       <div className="table-wrap"><table><SortableHead columns={SESSION_COLUMNS} sort={sort} onSort={setSort}/><tbody id="sessionTable">
         {loading ? <UsageTableSkeleton columns={SESSION_COLUMNS.length}/> : rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(row => <Fragment key={row.key}>
           <SessionRow row={row} selection={selection} expanded={expanded.has(row.key)} onExpand={toggle} onSelect={select}/>
