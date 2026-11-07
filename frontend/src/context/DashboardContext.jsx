@@ -13,7 +13,7 @@ export function offlineQuota(snapshot, error) {
     ...snapshot, status: 'error', message: error.message, windows: [], plan_type: null,
     history_mode: snapshot?.reset_history_scope ? 'offline' : 'unavailable',
     history_label: snapshot?.history_mode === 'offline' || snapshot?.history_directory_verified === false
-      ? snapshot.history_label || '上次保存的账号' : '上次保存的账号',
+      ? snapshot.history_label || "system:lastSavedAccount" : "system:lastSavedAccount",
     history_fetched_at: snapshot?.history_fetched_at || snapshot?.fetched_at,
   };
 }

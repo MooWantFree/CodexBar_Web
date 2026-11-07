@@ -1,0 +1,5 @@
+{
+  "dismissNotice": "关闭提示",
+  "reconnectHint": "无法连接后端服务。请重新启动服务，连接恢复后此提示会自动消失。",
+  "serviceIsUnavailable": "服务已关闭"
+}

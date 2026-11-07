@@ -1,0 +1,92 @@
+{
+  "exact": {
+    "Codex 目录不能为空。": "system:theCodexDirectoryCannotBeEmpty",
+    "Codex 目录不存在，请选择已有目录。": "system:theCodexDirectoryDoesNotExistChoose",
+    "Codex 路径必须是目录。": "system:theCodexPathMustBeADirectory",
+    "Codex 目录无法读取，请检查访问权限。": "system:theCodexDirectoryCannotBeReadCheck",
+    "Codex 目录结构无效：sessions 和 archived_sessions 必须是目录，logs_2.sqlite 必须是文件。": "system:invalidCodexDirectoryStructureSessionsAndArchived",
+    "保存 Codex 目录失败，请稍后重试。": "system:couldNotSaveTheCodexDirectoryTry",
+    "只能从本机页面打开文件夹选择器。": "system:openTheFolderPickerFromAPage",
+    "文件夹选择器已打开，请先完成或取消选择。": "system:theFolderPickerIsAlreadyOpenComplete",
+    "无法打开系统文件夹选择器，请手工填写目录。": "system:couldNotOpenTheSystemFolderPicker",
+    "当前账号": "system:currentAccount",
+    "上次保存的账号": "system:lastSavedAccount",
+    "旧版本本地账号档案（日志目录归属未确认）": "system:legacyLocalAccountArchiveLogDirectoryOwnership",
+    "CODEX_TOKEN_REPORT_CODEX_BIN 指向的文件不存在，请检查路径。": "system:theFileConfiguredInCodexTokenReport",
+    "无法使用配置的 Codex CLI，请指定 codex.exe 的路径。": "system:theConfiguredCodexCliCannotBeUsed",
+    "未找到 Codex CLI。请安装 CLI，或设置 CODEX_TOKEN_REPORT_CODEX_BIN。": "system:codexCliWasNotFoundInstallIt",
+    "无法启动 Codex CLI，请检查可执行文件路径。": "system:couldNotStartCodexCliCheckThe",
+    "Codex 额度连接已中断，请稍后刷新。": "system:theCodexQuotaConnectionWasInterruptedRefresh",
+    "读取 Codex 额度超时，请稍后刷新。": "system:readingCodexQuotaTimedOutRefreshLater",
+    "Codex 额度连接已中断，请检查 CLI 和登录状态。": "system:theCodexQuotaConnectionWasInterruptedCheck",
+    "Codex 无法读取额度，请检查 ChatGPT 登录状态或稍后重试。": "system:codexCouldNotReadQuotaCheckYour",
+    "Codex 返回的额度格式不兼容，请更新 CLI。": "system:theQuotaFormatReturnedByCodexIs",
+    "Codex 尚未登录，请先在 Codex 中登录 ChatGPT 账号。": "system:codexIsNotSignedInSignIn",
+    "当前使用 API Key / Bedrock，无法读取订阅额度。": "system:apiKeyBedrockAuthenticationIsInUse",
+    "刷新登录后无法识别 ChatGPT 账号。": "system:theChatgptAccountCouldNotBeIdentified",
+    "读取额度失败，请检查 Codex CLI 后重试。": "system:couldNotReadQuotaCheckCodexCli",
+    "请成功读取当前账号额度后查看历史；需要可识别的账号身份。": "system:readTheCurrentAccountQuotaSuccessfullyBefore",
+    "请先读取账号额度。": "system:readTheAccountQuotaFirst",
+    "缺少有效的已消耗百分比，无法计算金额。": "system:aValidUsedPercentageIsMissingSo",
+    "缺少有效的额度快照、重置时间或窗口长度，无法确定统计范围。": "system:aValidQuotaSnapshotResetTimeOr",
+    "快照中的重置时间已过期，请刷新额度后计算。": "system:theSnapshotResetTimeHasPassedRefresh",
+    "窗口长度超出支持范围，无法确定周期开始时间。": "system:theWindowDurationExceedsTheSupportedRange",
+    "本地调用日志没有额度组标识，无法分配到此额度组。": "system:localRequestLogsHaveNoQuotaGroup",
+    "已消耗为 0%，不推测未使用的滚动窗口或额度美元价值。": "system:usageIs0AnUnusedRollingWindow",
+    "无法确定当前周期起点，暂不计算金额。": "system:theCurrentCycleStartCannotBeDetermined",
+    "缺少有效的额度快照时间，请刷新额度后计算。": "system:aValidQuotaSnapshotTimeIsMissing",
+    "当前账号未返回可计算的额度窗口。": "system:theCurrentAccountReturnedNoQuotaWindows",
+    "API 等价金额按本机日志估算；日志缺少账号标识，无法核对当前账号归属。不同窗口的统计范围可能重叠，金额请勿相加。": "system:apiEquivalentAmountsAreEstimatedFromLocal",
+    "此周期没有本地调用记录，已消耗额度的金额未知。": "system:thisCycleHasNoLocalRequestRecords",
+    "已消耗为 0%，无法据此外推每 1% 或整窗价值。": "system:usageIs0TheValuePer1",
+    "按已知金额换算；未定价调用未计入金额。": "system:convertedUsingKnownAmountsUnpricedRequestsAre",
+    "此周期没有已定价调用，暂时无法换算额度美元。": "system:thisCycleHasNoPricedRequestsSo",
+    "显示最后一次保存的换算，金额与百分比保持当次读数。": "system:showingTheLastSavedConversionWithAmounts",
+    "所选时间在当前时区不存在": "system:theSelectedTimeDoesNotExistIn",
+    "精确范围需要两个重置时刻及对应日期": "system:anExactRangeRequiresTwoResetTimes",
+    "重置时刻必须含时区且与日期时分一致": "system:resetTimesMustIncludeATimezoneAnd",
+    "两个重置时刻必须不同，开始时间须早于结束时间": "system:theResetTimesMustDifferAndThe",
+    "开始时间不能晚于结束时间": "system:theStartTimeCannotBeLaterThan",
+    "结束时间超出支持范围": "system:theEndTimeExceedsTheSupportedRange",
+    "价格和倍率必须是有限的非负数": "system:pricesAndMultipliersMustBeFiniteNonnegative",
+    "请求参数无效": "system:invalidRequestParameters",
+    "所选范围内没有该会话的调用": "system:noRequestsForThisSessionExistIn",
+    "项目不存在": "system:projectNotFound",
+    "额度历史读取失败，请稍后重试。": "system:couldNotReadQuotaHistoryTryAgain",
+    "额度读数历史读取失败，请稍后重试。": "system:couldNotReadQuotaObservationHistoryTry",
+    "当前账号没有此周期的历史记录。": "system:theCurrentAccountHasNoHistoryFor",
+    "价格目录缺少 OpenAI 模型表": "system:thePriceCatalogIsMissingTheOpenai",
+    "价格目录没有有效的 OpenAI 单价，保留上次有效缓存": "system:theCatalogContainsNoValidOpenaiPrices",
+    "价格目录被重定向到非允许域名": "system:thePriceCatalogWasRedirectedToA",
+    "价格目录过大": "system:thePriceCatalogIsTooLarge",
+    "价格必须是有限的非负数": "system:pricesMustBeFiniteNonnegativeNumbers",
+    "价格不是有效数字": "system:thePriceIsNotAValidNumber",
+    "models.dev 未提供该 OpenAI 模型": "system:modelsDevDoesNotProvideThisOpenai",
+    "模型缺少价格": "system:theModelHasNoPrices",
+    "模型缺少 input/output 价格": "system:theModelIsMissingInputOutputPrices",
+    "长上下文阈值无效": "system:theLongContextThresholdIsInvalid",
+    "模型 ID 只能包含小写字母、数字、点、下划线和连字符": "system:modelIdsMayContainOnlyLowercaseLetters",
+    "logs_2.sqlite 不存在": "system:logs2SqliteWasNotFound",
+    "{field} 必须是 YYYY-MM-DD": "system:mustUseYyyyMmDd",
+    "{field} 必须是 HH:MM（00:00–23:59）": "system:mustUseHhMm000023"
+  },
+  "patterns": [
+    {
+      "pattern": "^(start|end) 必须是 YYYY-MM-DD$",
+      "key": "system:mustUseYyyyMmDd",
+      "params": [
+        "field"
+      ]
+    },
+    {
+      "pattern": "^(start_time|end_time) 必须是 HH:MM（00:00–23:59）$",
+      "key": "system:mustUseHhMm000023",
+      "params": [
+        "field"
+      ]
+    }
+  ],
+  "legacyLabels": {
+    "unknownProject": "未知项目"
+  }
+}

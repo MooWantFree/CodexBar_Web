@@ -1,12 +1,12 @@
+import wireMessages from '../../locales/backend-messages.json';
 import {useEffect, useRef} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {useDashboard} from '../../context/DashboardContext';
 import {apiGet} from '../../lib/api';
 import {t} from '../../lib/i18n';
-import {formatNumber, money} from '../../lib/format';
+import {money} from '../../lib/format';
 import {StackedChart} from '../../components/Shared';
 import {UsageChartSkeleton} from '../../components/UsageSkeleton';
-import '../usageMessages';
 
 export const PAGE_SIZE = 50;
 export const EMPTY_ROWS = [];
@@ -14,9 +14,9 @@ export const numeric = value => Number(value || 0);
 export const fixed = (value, digits = 1) => numeric(value).toFixed(digits);
 export const priceUnknown = row => row.unknown_price_calls > 0;
 export const cost = (row, precise = false) => money(row.api_usd_known, precise);
-export const projectName = row => !row.path && row.display_name === '未知项目' ? t('未知项目') : row.display_name || row.key;
+export const projectName = row => !row.path && row.display_name === wireMessages.legacyLabels.unknownProject ? t("usage:unknownProject") : row.display_name || row.key;
 export const sessionTitle = row => row.title_generated
-  ? t('会话 {id}', {id: String(row.key).slice(0, 12)}) : row.title || row.key;
+  ? t("usage:session", {id: String(row.key).slice(0, 12)}) : row.title || row.key;
 
 function sortValue(row, field) {
   if (['timestamp', 'last_activity', 'key'].includes(field)) return Date.parse(row[field]);
@@ -41,7 +41,7 @@ export function SortableHead({columns, sort, onSort}) {
     const direction = active && sort.direction === 'ascending' ? 'descending' : 'ascending';
     return <th key={`${label}-${index}`} scope="col" title={title && t(title)} aria-sort={field ? active ? sort.direction : 'none' : undefined}>
       {field ? <button type="button" className="table-sort"
-        aria-label={t('{label}：点击按{direction}排序', {label: t(label), direction: t(direction === 'ascending' ? '升序' : '降序')})}
+        aria-label={t("usage:sortAccessibleLabel", {label: t(label), direction: t(direction === 'ascending' ? "usage:ascending" : "usage:descending")})}
         onClick={() => onSort({field, direction})}>{t(label)}<span className="sort-indicator" aria-hidden="true">{active ? sort.direction === 'ascending' ? '↑' : '↓' : '↕'}</span></button> : t(label)}
     </th>;
   })}</tr></thead>;
@@ -87,10 +87,10 @@ export function TrendPair({report, nested = false, prefix = '', loading = false}
   const rows = report?.[range.grain] || EMPTY_ROWS;
   const ref = useRef(null);
   useSynchronizedCharts(ref, rows);
-  const grain = t(range.grain === 'hourly' ? '每小时' : '每日');
+  const grain = t(range.grain === 'hourly' ? "usage:hourly" : "usage:daily");
   return <section ref={ref} className={`charts-grid ${nested ? 'nested-charts' : ''}`}>
     {['total_tokens', 'api_usd_known'].map((metric, index) => {
-      const title = t(index === 0 ? '{grain} Token · 按模型' : '{grain} API 等价美元 · 按模型', {grain});
+      const title = t(index === 0 ? "usage:tokenByModel" : "usage:apiEquivalentUsdByModel", {grain});
       return <article key={metric} className={nested ? undefined : 'panel chart-panel'}>
         {nested ? <h3>{title}</h3> : <div className="panel-heading"><h2>{title}</h2></div>}
         <div id={prefix ? `${prefix}${index ? 'CostChart' : 'TokenChart'}` : index ? 'costChart' : 'tokenChart'} className={`daily-chart ${range.grain === 'hourly' ? 'hourly-chart' : ''}`}>
@@ -106,11 +106,10 @@ export function useSummary() {
   return useQuery({queryKey: ['summary', rangeKey], queryFn: ({signal}) => apiGet(`/api/summary?${queryString()}`, {signal})});
 }
 
-export const FAST_TITLE = 'API 等价美元加价；订阅内 Fast 额度消耗是 Standard 的 2.5 倍';
-export const MODEL_COLUMNS = [['模型'], ['调用', 'calls'], ['Fast', 'fast_calls'], ['Input', 'input_tokens'], ['缓存', 'cached_input_tokens'],
-  ['Output', 'output_tokens'], ['API 等价', 'api_usd_known'], ['Fast API 加价', 'fast_surcharge_usd', FAST_TITLE],
-  ['档位覆盖', 'tier_coverage_percent']];
-
+export const FAST_TITLE = "usage:fastSurchargeDescription";
+export const MODEL_COLUMNS = [["usage:model"], ["usage:calls", 'calls'], ["common:fast", 'fast_calls'], ["common:input", 'input_tokens'], ["usage:cached", 'cached_input_tokens'],
+  ["common:output", 'output_tokens'], ["usage:apiEquivalent", 'api_usd_known'], ["usage:fastApiSurcharge", 'fast_surcharge_usd', FAST_TITLE],
+  ["usage:tierCoverage", 'tier_coverage_percent']];
 
 export function scrollToDetail(ref) {
   ref.current?.focus({preventScroll: true});

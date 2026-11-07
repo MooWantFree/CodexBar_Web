@@ -1,0 +1,18 @@
+{
+  "chinese": "中文 (Chinese)",
+  "chooseFolder": "Choose folder",
+  "choosing": "Choosing…",
+  "codexLogDirectory": "Codex log directory",
+  "directoryNotFound": "The current log directory does not exist. Choose a valid directory.",
+  "directoryRequirements": "The folder must contain sessions, archived_sessions, or logs_2.sqlite. Saved history is retained.",
+  "english": "English",
+  "enterTheCodexLogDirectory": "Enter the Codex log directory.",
+  "followBrowser": "Follow browser",
+  "interfaceLanguage": "Interface language",
+  "japanese": "日本語",
+  "logDirectorySaved": "Log directory saved.",
+  "logsAndInterface": "Logs and interface",
+  "saveAndScan": "Save and scan",
+  "savingAndScanning": "Saving and scanning…",
+  "settings": "Settings"
+}

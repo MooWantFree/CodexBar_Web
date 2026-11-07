@@ -1,0 +1,18 @@
+{
+  "chinese": "中文 (Chinese)",
+  "chooseFolder": "フォルダーを選択",
+  "choosing": "選択中…",
+  "codexLogDirectory": "Codexログディレクトリ",
+  "directoryNotFound": "現在のログディレクトリが見つかりません。有効なディレクトリを指定してください。",
+  "directoryRequirements": "sessions、archived_sessions、または logs_2.sqlite を含むフォルダーを指定してください。保存済みの履歴は保持されます。",
+  "english": "English",
+  "enterTheCodexLogDirectory": "Codexログディレクトリを入力してください。",
+  "followBrowser": "ブラウザーに合わせる",
+  "interfaceLanguage": "表示言語",
+  "japanese": "日本語",
+  "logDirectorySaved": "ログディレクトリを保存しました。",
+  "logsAndInterface": "ログと表示",
+  "saveAndScan": "保存してスキャン",
+  "savingAndScanning": "保存してスキャン中…",
+  "settings": "設定"
+}

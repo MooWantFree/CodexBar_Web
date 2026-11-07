@@ -1,10 +1,5 @@
-import {t, addMessages} from './i18n';
 import {systemMessage} from './systemMessages';
-
-addMessages({
-  en: {'请求失败（{status}）': 'Request failed ({status})'},
-  ja: {'请求失败（{status}）': 'リクエストに失敗しました（{status}）'},
-});
+import {t} from "./i18n";
 
 async function request(path, method = 'GET', body, options = {}) {
   const response = await fetch(path, {
@@ -14,7 +9,7 @@ async function request(path, method = 'GET', body, options = {}) {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error(systemMessage(payload?.detail) || t('请求失败（{status}）', {status: response.status}));
+    const error = new Error(systemMessage(payload?.detail) || t("common:requestFailed", {status: response.status}));
     error.status = response.status;
     throw error;
   }

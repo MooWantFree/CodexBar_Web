@@ -179,7 +179,7 @@ describe("quota saved history", () => {
   it("keeps reset expiration dates open for the same account and closes them on an account switch", async () => {
     const quota = { ...liveQuota, reset_credits_available: 1, reset_credits: [{ title: "Full reset", expires_at: 1793300934 }] };
     const { client } = mount(<QuotaSidebar />, quota);
-    fireEvent.click(screen.getByRole("button", { name: "Available quota resets: 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Available quota reset: 1" }));
     expect(document.querySelector("#quotaResetPopover").open).toBe(true);
     act(() => client.setQueryData(["quota"], { ...quota, checked_at: "2026-10-01T03:00:00Z", reset_credits: [{ title: "Updated reset" }] }));
     await screen.findByText("Updated reset");
@@ -258,7 +258,7 @@ describe("quota controls", () => {
     expect(screen.getByText("用户的重置")).toBeTruthy();
     expect(screen.getByText("No expiration date")).toBeTruthy();
     expect(screen.getByText("Expiration date unavailable")).toBeTruthy();
-    expect(screen.getByText("Expiration dates for 1 resets are unavailable.")).toBeTruthy();
+    expect(screen.getByText("Expiration dates for 1 reset are unavailable.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close expiration dates" }));
     expect(document.querySelector("#quotaResetPopover").open).toBe(false);
   });

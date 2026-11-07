@@ -13,16 +13,16 @@ export default function OverviewPage() {
   const total = query.data?.total || {};
   const models = query.data?.models || EMPTY_ROWS;
   const sorted = useMemo(() => sortUsageRows(models, sort), [models, sort]);
-  if (!query.data?.total && !loading) return <><ErrorNotice error={query.error}/><EmptyState>{t('暂无数据')}</EmptyState></>;
+  if (!query.data?.total && !loading) return <><ErrorNotice error={query.error}/><EmptyState>{t("common:noData")}</EmptyState></>;
   const cacheRate = total.input_tokens ? total.cached_input_tokens / total.input_tokens * 100 : 0;
   const kpis = [
-    ['accent-blue kpi-card-token', '总 Input', formatCompact(total.input_tokens), formatNumber(total.input_tokens), t('普通输入 {count}', {count: formatCompact(total.uncached_input_tokens)}), 'inputKpi'],
-    ['accent-cyan kpi-card-token', '缓存 Input', formatCompact(total.cached_input_tokens), formatNumber(total.cached_input_tokens), t('占 Input {percent}%', {percent: fixed(cacheRate)}), 'cachedKpi'],
-    ['accent-violet kpi-card-token', '总 Output', formatCompact(total.output_tokens), formatNumber(total.output_tokens), t('其中推理 {count}', {count: formatCompact(total.reasoning_output_tokens)}), 'outputKpi'],
-    ['accent-amber', 'API 等价成本', money(total.api_usd_known), cost(total), t('定价覆盖 {percent}% 调用', {percent: fixed(total.price_coverage_percent)}), 'costKpi'],
-    ['accent-pink', 'Fast 调用', formatNumber(total.fast_calls), `Fast tokens ${formatNumber(total.fast_tokens)}`, t('档位覆盖 {percent}%', {percent: fixed(total.tier_coverage_percent)}), 'fastKpi'],
+    ['accent-blue kpi-card-token', "usage:totalInput", formatCompact(total.input_tokens), formatNumber(total.input_tokens), t("usage:uncachedInput", {count: formatCompact(total.uncached_input_tokens)}), 'inputKpi'],
+    ['accent-cyan kpi-card-token', "usage:cachedInput", formatCompact(total.cached_input_tokens), formatNumber(total.cached_input_tokens), t("usage:ofInput", {percent: fixed(cacheRate)}), 'cachedKpi'],
+    ['accent-violet kpi-card-token', "usage:totalOutput", formatCompact(total.output_tokens), formatNumber(total.output_tokens), t("usage:includingReasoning", {count: formatCompact(total.reasoning_output_tokens)}), 'outputKpi'],
+    ['accent-amber', "usage:apiEquivalentCost", money(total.api_usd_known), cost(total), t("usage:priceCoverageOfCalls", {percent: fixed(total.price_coverage_percent)}), 'costKpi'],
+    ['accent-pink', "usage:fastCalls", formatNumber(total.fast_calls), `Fast tokens ${formatNumber(total.fast_tokens)}`, t("usage:tierCoverageValue", {percent: fixed(total.tier_coverage_percent)}), 'fastKpi'],
   ];
-  return <><LoadingStatus loading={loading}>{t('正在汇总用量…')}</LoadingStatus>
+  return <><LoadingStatus loading={loading}>{t("usage:summarizingUsage")}</LoadingStatus>
   <section className="page" data-page="overview" aria-busy={query.isFetching}>
     <ErrorNotice error={query.error}/>
     <section className="kpi-grid">{kpis.map(([accent, title, value, tooltip, detail, id]) => <article key={id} className={`kpi-card ${accent}`}>
@@ -31,8 +31,8 @@ export default function OverviewPage() {
       <small>{loading ? <UsageSkeleton className="usage-kpi-detail"/> : detail}</small>
     </article>)}</section>
     <TrendPair report={query.data} loading={loading}/>
-    <section className="panel table-panel"><div className="panel-heading model-heading"><h2>{t('按模型统计')}</h2>
-      <div id="modelLegend" className="legend model-legend" aria-label={t('模型图例')}>{loading
+    <section className="panel table-panel"><div className="panel-heading model-heading"><h2>{t("usage:usageByModel")}</h2>
+      <div id="modelLegend" className="legend model-legend" aria-label={t("usage:modelLegend")}>{loading
         ? [0, 1, 2].map(index => <UsageSkeleton key={index} className="usage-model-legend"/>)
         : models.map(row => <span key={row.key}><i style={{background: modelColor(row.key)}}/>{modelName(row)}</span>)}</div>
     </div><div className="table-wrap"><table><SortableHead columns={MODEL_COLUMNS} sort={sort} onSort={setSort}/><tbody id="modelTable">
@@ -40,7 +40,7 @@ export default function OverviewPage() {
         : sorted.map(row => <tr key={row.key}><td><i className="model-dot" style={{background: modelColor(row.key)}}/>{modelName(row)}</td>
         <td>{formatNumber(row.calls)}</td><td>{formatNumber(row.fast_calls)}</td><td>{formatNumber(row.input_tokens)}</td><td>{formatNumber(row.cached_input_tokens)}</td><td>{formatNumber(row.output_tokens)}</td>
         <td><CostValue row={row} models={[row]}/></td><td><CostValue row={row} kind="fast" models={[row]}/></td><td><Coverage value={row.tier_coverage_percent}/></td>
-      </tr>)}{!loading && !models.length && <tr><td colSpan={9}><EmptyState>{t('暂无数据')}</EmptyState></td></tr>}
+      </tr>)}{!loading && !models.length && <tr><td colSpan={9}><EmptyState>{t("common:noData")}</EmptyState></td></tr>}
     </tbody></table></div></section>
   </section></>;
 }

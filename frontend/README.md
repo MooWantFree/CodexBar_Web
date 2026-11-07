@@ -25,8 +25,10 @@ Rebuild after editing the frontend. Start the existing Python service at
 - `src/lib/api.js`: HTTP methods and localized API failures.
 - `src/lib/range.js`: API query serialization, including precise reset boundaries.
 - `src/lib/format.js`: locale-aware numbers, USD amounts, dates, and quota labels.
-- `src/lib/i18n.js`: browser-language detection and translation/interpolation.
-- `src/lib/systemMessages.js`: translations of application-owned backend messages.
+- `src/lib/i18n.js`: i18next initialization, React subscriptions and language preferences.
+- `src/locales/{en,ja,zh}/*.json`: translations grouped by feature namespace.
+- `src/locales/backend-messages.json`: recognized backend messages and their translation keys.
+- `src/lib/systemMessages.js`: maps application-owned backend errors while preserving external diagnostics.
 - `src/test`: React behavior tests run with Vitest and Testing Library.
 
 The Settings page offers Follow browser, Chinese, English, and Japanese. The browser
@@ -35,12 +37,29 @@ or clearing the current filters and drafts. Follow browser is the default: it
 selects the first supported language in `navigator.languages`, falling back to
 `navigator.language`, then English. Supported languages are `zh`, `en`, and
 `ja`; regional tags such as `zh-CN`, `zh-TW`, `en-GB`, and `ja-JP` match their base language.
-Chinese uses Simplified Chinese messages. Chinese source keys supply their native
-wording; English-keyed messages have a Chinese catalog in `src/lib/zhMessages.js`.
-Components register language catalogs with `addMessages` and render
-messages through `t(key, parameters)`. User titles and external names are kept
-as data. API date/time values stay ISO; displayed values use the browser-selected
-language and the configured report timezone.
+Chinese uses Simplified Chinese messages. i18next and react-i18next load the JSON
+resources with the application bundle, so language switching needs no network
+request and works offline. Missing translations fall back to English.
+
+Keep translated text in `src/locales/{language}/{namespace}.json`; components and
+helpers reference semantic keys such as `t('settings:chooseFolder')`. Use `common`
+for shared labels and feature namespaces for dates, costs, connection status,
+usage, quota, pricing, settings and system errors. Do not register dictionaries
+inside JavaScript or JSX, use visible sentences as keys, or construct keys by
+joining translated words. Independently mounted components can subscribe through
+`useLocale()` or react-i18next's `useTranslation()`.
+
+Use `{{name}}` placeholders and pass raw numeric `count` values for plural messages.
+English uses `_one` and `_other`; Chinese and Japanese use `_other`. Numeric
+placeholders can use `{{count, number}}`. Keep keys and placeholders consistent in
+all three languages. Resource tests check coverage and parameter parity; add
+behavior tests when a new message introduces plural or formatting rules.
+
+User titles, external diagnostics and model identifiers remain literal data.
+Recognized backend messages map to semantic keys in `backend-messages.json`.
+API date/time values stay ISO; displayed values use the selected language and the
+configured report timezone. React escapes rendered text, and interpolation does
+not interpret placeholder-like content inside external values.
 
 To add a page, add a React component and route metadata in `App.jsx`, consume
 filters through `useDashboard`, and fetch data with a query key that includes

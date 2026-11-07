@@ -53,27 +53,38 @@ describe('browser language selection', () => {
 });
 
 describe('message catalogs', () => {
-  it('selects Japanese and falls back to English for a missing Japanese key', async () => {
-    const { addMessages, t } = await loadI18n(['ja-JP']);
-    addMessages({ en: { '测试': 'English {count}', '仅英语': 'English only' }, ja: { '测试': '日本語 {count}' } });
-    expect(t('测试', { count: 3 })).toBe('日本語 3');
-    expect(t('仅英语')).toBe('English only');
-    expect(t('unregistered message')).toBe('unregistered message');
-    expect(t('模型定价')).toBe('モデル料金');
+  it('selects Japanese and falls back to English within a namespace', async () => {
+    const {i18n, t} = await loadI18n(['ja-JP']);
+    i18n.addResourceBundle('en', 'test', {sample: 'English {{count}}', englishOnly: 'English only'});
+    i18n.addResourceBundle('ja', 'test', {sample: '日本語 {{count}}'});
+    expect(t('test:sample', {count: 3})).toBe('日本語 3');
+    expect(t('test:englishOnly')).toBe('English only');
+    expect(t('test:unregistered')).toBe('unregistered');
+    expect(t('common:usageOverview')).toBe('使用量の概要');
   });
 
-  it('interpolates literal values without recursively interpreting their placeholders', async () => {
-    const { addMessages, t } = await loadI18n(['en-GB']);
-    addMessages({ en: { '模板': '{value} / {count} / {missing}' } });
-    expect(t('模板', { value: '<script>{count}</script>', count: 0 })).toBe('<script>{count}</script> / 0 / {missing}');
-    expect(t('模板', Object.create({ value: 'inherited', count: 10 }))).toBe('{value} / {count} / {missing}');
+  it('keeps interpolated external values literal and ignores inherited parameters', async () => {
+    const {i18n, t} = await loadI18n(['en-GB']);
+    i18n.addResourceBundle('en', 'test', {interpolation: '{{value}} / {{count}} / {{missing}}'});
+    expect(t('test:interpolation', {value: '<script>{{count}}</script>', count: 0})).toBe('<script>{{count}}</script> / 0 / {{missing}}');
+    expect(t('test:interpolation', Object.create({value: 'inherited', count: 10}))).toBe('{{value}} / {{count}} / {{missing}}');
   });
 
   it('does not resolve inherited catalog properties as messages', async () => {
-    const { t, addMessages } = await loadI18n(['en-US']);
+    const {t} = await loadI18n(['en-US']);
     expect(t('constructor')).toBe('constructor');
-    addMessages({ en: JSON.parse('{"__proto__":"literal key"}') });
-    expect(t('__proto__')).toBe('literal key');
+    expect(t('__proto__')).toBe('__proto__');
+  });
+
+  it('selects English plural forms using numeric counts and formats large counts', async () => {
+    const store = await loadI18n(['en-US']);
+    expect(store.t('common:backfilledCalls', {count: 1})).toContain('1 call uses');
+    expect(store.t('common:backfilledCalls', {count: 2})).toContain('2 calls use');
+    expect(store.t('common:backfilledCalls', {count: 1000})).toContain('1,000 calls use');
+    store.setLanguagePreference('zh');
+    expect(store.t('common:backfilledCalls', {count: 1000})).toContain('1,000 次调用');
+    store.setLanguagePreference('ja');
+    expect(store.t('common:backfilledCalls', {count: 1})).toContain('1 回の呼び出し');
   });
 });
 
@@ -110,18 +121,16 @@ describe('localized formatting', () => {
   it('uses the persisted Chinese choice for native labels, English-keyed features, and formatting', async () => {
     localStorage.setItem('codex-token-report.language', 'zh');
     const store = await loadI18n(['en-US']);
-    await import('../pages/quotaMessages');
-    await import('../pages/settingsMessages');
     const {formatCompact, formatDateTime, quotaWindowLabel} = await import('../lib/format');
     const {systemMessage} = await import('../lib/systemMessages');
     document.body.dataset.timezone = 'Asia/Taipei';
     expect(store.locale).toBe('zh');
     expect(store.getLanguagePreference()).toBe('zh');
     expect(document.documentElement.lang).toBe('zh');
-    expect(store.t('用量总览')).toBe('用量总览');
-    expect(store.t('Model price management')).toBe('模型价格管理');
-    expect(store.t('Current cycle conversion')).toBe('当前周期换算');
-    expect(store.t('{window} remaining {percent}', {window: '每周额度', percent: '75%'})).toBe('每周额度剩余 75%');
+    expect(store.t("common:usageOverview")).toBe('用量总览');
+    expect(store.t("pricing:modelPriceManagement")).toBe('模型价格管理');
+    expect(store.t("quota:currentCycleConversion")).toBe('当前周期换算');
+    expect(store.t("quota:remainingAccessibleLabel", {window: '每周额度', percent: '75%'})).toBe('每周额度剩余 75%');
     expect(formatCompact(10000)).toBe('1万');
     expect(quotaWindowLabel({window_minutes: 300, limit_id: 'codex'})).toBe('5 小时额度');
     expect(formatDateTime('2026-10-01T17:03:00Z', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})).toBe('2026/10/02 01:03');
@@ -193,7 +202,7 @@ describe('generated model labels', () => {
       model_entries: [{ key: 'unknown', display_name: '未知模型' }],
       project_entries: [{ key: 'unknown', display_name: '未知项目', path: null }] };
     expect(sessionMatches(row, expected)).toBe(true);
-    expect(sessionMatches(row, t('未知项目'))).toBe(true);
+    expect(sessionMatches(row, t("usage:unknownProject"))).toBe(true);
     expect(sessionMatches({ key: 'legacy', title: 'Literal session', models: ['未知模型'], projects: ['未知项目'] }, expected)).toBe(false);
 
   });
@@ -231,7 +240,7 @@ describe('language preferences', () => {
     store.setLanguagePreference('ja');
     expect(store.locale).toBe('ja');
     expect(document.documentElement.lang).toBe('ja');
-    expect(store.t('模型定价')).toBe('モデル料金');
+    expect(store.t('pricing:modelPriceManagement')).toBe('モデル料金の管理');
     expect(formatCompact(10000)).toBe('1万');
     expect(money(10)).toBe('$10.00');
     expect(formatDateTime('2026-10-01T17:03:00Z', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})).toBe('2026/10/02 01:03');
@@ -274,7 +283,7 @@ describe('language preferences', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Full', 'QuotaExceededError'); });
     expect(() => store.setLanguagePreference('ja')).not.toThrow();
     expect(store.getLanguagePreference()).toBe('ja');
-    expect(store.t('用量总览')).toBe('使用量の概要');
+    expect(store.t("common:usageOverview")).toBe('使用量の概要');
   });
 
   it('synchronizes cross-tab storage changes and browser language changes in auto mode', async () => {

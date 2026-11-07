@@ -58,7 +58,7 @@ describe('React analytics pages', () => {
     expect(document.getElementById('costKpi').textContent).toBe('$8.00');
     expect(document.getElementById('costKpi').closest('article').textContent).not.toContain('+ Unknown');
     expect(document.getElementById('costKpi').classList.contains('unknown-cost')).toBe(true);
-    expect(document.getElementById('costKpi').title).toContain('unknown for 1 calls');
+    expect(document.getElementById('costKpi').title).toContain('unknown for 1 call.');
     expect(document.querySelector('#modelTable .unknown-cost').title).toContain('GPT 6 Astra');
     expect(document.getElementById('creditsKpi')).toBeNull();
     expect(screen.queryByText('Credits')).toBeNull();
@@ -80,7 +80,7 @@ describe('React analytics pages', () => {
     expect(unknown[0].title).toContain('required Token rates');
     expect(unknown[1].textContent).toBe('$1.00');
     expect(unknown[1].classList.contains('unknown-cost')).toBe(true);
-    expect(unknown[1].title).toContain('1 Fast calls');
+    expect(unknown[1].title).toContain('1 Fast call.');
     for (const amount of rows.find(row => row.cells[0].textContent === zero.key).querySelectorAll('.cost-value')) {
       expect(amount.textContent).toBe('$0.00');
       expect(amount.classList.contains('unknown-cost')).toBe(false);
@@ -96,7 +96,7 @@ describe('React analytics pages', () => {
     await screen.findByRole('heading', {name: 'Project A · usage trend'});
     expect(document.querySelectorAll('#projectTable .unknown-cost')).toHaveLength(2);
     expect(document.querySelector('#projectTable .unknown-cost').title).toContain('GPT 6 Astra');
-    expect(document.querySelector('#projectTotalCostChart .unknown-cost').title).toContain('unknown for 1 calls');
+    expect(document.querySelector('#projectTotalCostChart .unknown-cost').title).toContain('unknown for 1 call.');
     expect(document.querySelector('#projectCostChart .unknown-cost').title).toContain('GPT 6 Astra');
     expect(document.querySelectorAll('#projectDetail table .unknown-cost')).toHaveLength(1);
   });

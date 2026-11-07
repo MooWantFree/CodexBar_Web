@@ -55,9 +55,9 @@ export function QuotaUsageChart({ observations }) {
   }
 
   return <figure className="quota-usage-chart">
-    <figcaption><span>{t("Used quota")}</span>{active && <output aria-live="polite" aria-atomic="true"><strong>{percent(active.used)}</strong><time dateTime={active.fetched_at}>{valueTime(active.fetched_at)}</time></output>}</figcaption>
-    <div ref={plotRef} className="quota-usage-plot" role="group" aria-label={t("Quota usage over time")} tabIndex={active ? 0 : undefined} onKeyDown={selectWithKeyboard}>
-      {active ? <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t("Quota usage over time")} onPointerMove={selectAtPointer} onPointerDown={selectAtPointer} onPointerLeave={() => setSelected(null)}>
+    <figcaption><span>{t("quota:usedQuota")}</span>{active && <output aria-live="polite" aria-atomic="true"><strong>{percent(active.used)}</strong><time dateTime={active.fetched_at}>{valueTime(active.fetched_at)}</time></output>}</figcaption>
+    <div ref={plotRef} className="quota-usage-plot" role="group" aria-label={t("quota:quotaUsageOverTime")} tabIndex={active ? 0 : undefined} onKeyDown={selectWithKeyboard}>
+      {active ? <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t("quota:quotaUsageOverTime")} onPointerMove={selectAtPointer} onPointerDown={selectAtPointer} onPointerLeave={() => setSelected(null)}>
         {Array.from({ length: 5 }, (_, index) => {
           const used = minimum + (maximum - minimum) * index / 4;
           return <g key={used}><line className="quota-usage-grid" x1={left} x2={right} y1={y(used)} y2={y(used)} /><text className="quota-usage-axis" x={left - 10} y={y(used)} dy=".35em" textAnchor="end">{percent(used)}</text></g>;
@@ -69,7 +69,7 @@ export function QuotaUsageChart({ observations }) {
         {readings.length <= 80 && readings.map((row, index) => <circle className="quota-usage-point" key={index} cx={x(row.time)} cy={y(row.used)} r="3"><title>{valueTime(row.fetched_at)} · {percent(row.used)}</title></circle>)}
         <line className="quota-usage-cursor" x1={x(active.time)} x2={x(active.time)} y1={top} y2={bottom} />
         <circle className="quota-usage-active" cx={x(active.time)} cy={y(active.used)} r="5" />
-      </svg> : <EmptyState>{t(observations.length ? "No percentage readings are available." : "No snapshots are available for this cycle.")}</EmptyState>}
+      </svg> : <EmptyState>{t(observations.length ? "quota:noPercentageReadingsAreAvailable" : "quota:noSnapshotsAreAvailableForThisCycle")}</EmptyState>}
     </div>
   </figure>;
 }

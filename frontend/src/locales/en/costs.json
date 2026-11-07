@@ -1,0 +1,10 @@
+{
+  "missingPrices": "Required pricing information is missing, so the amount cannot be determined.",
+  "modelsWithUnpricedCalls": "Models with unpriced calls: {{models}}.",
+  "standardRateFallback_one": "{{count, number}} Fast call is temporarily estimated at Standard rates; its unknown Fast surcharge is not included.",
+  "standardRateFallback_other": "{{count, number}} Fast calls are temporarily estimated at Standard rates; their unknown Fast surcharge is not included.",
+  "unknownApiCost_one": "API equivalent cost is unknown for {{count, number}} call. The model or required Token rates are missing, or the Fast multiplier is unknown; saved price snapshots may also lack these prices. Displayed amounts include only the known portion.",
+  "unknownApiCost_other": "API equivalent cost is unknown for {{count, number}} calls. The model or required Token rates are missing, or the Fast multiplier is unknown; saved price snapshots may also lack these prices. Displayed amounts include only the known portion.",
+  "unknownFastSurcharge_one": "API surcharge is unknown for {{count, number}} Fast call. The model or required Token rates are missing, or the Fast multiplier is unknown; saved price snapshots may also lack these prices. Displayed amounts include only known surcharges.",
+  "unknownFastSurcharge_other": "API surcharge is unknown for {{count, number}} Fast calls. The model or required Token rates are missing, or the Fast multiplier is unknown; saved price snapshots may also lack these prices. Displayed amounts include only known surcharges."
+}

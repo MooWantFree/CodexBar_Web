@@ -13,6 +13,7 @@ export default defineConfig(({command}) => ({
       input: fileURLToPath(new URL('./src/main.jsx', import.meta.url)),
       output: {
         entryFileNames: 'app.js', chunkFileNames: '[name]-[hash].js',
+        manualChunks: id => id.includes('/src/locales/') ? 'locales' : undefined,
         assetFileNames: asset => asset.names?.some(name => name.endsWith('.css')) || asset.name?.endsWith('.css')
           ? 'styles.css' : '[name]-[hash][extname]',
       },

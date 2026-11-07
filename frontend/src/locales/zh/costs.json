@@ -1,0 +1,7 @@
+{
+  "missingPrices": "计算所需的价格信息缺失，无法确定金额。",
+  "modelsWithUnpricedCalls": "未能计价的模型：{{models}}。",
+  "standardRateFallback_other": "其中 {{count, number}} 次 Fast 调用暂按 Standard 金额估算，尚未计入未知的 Fast 加价。",
+  "unknownApiCost_other": "有 {{count, number}} 次调用的 API 等价金额未知。计算所需的模型或 Token 单价缺失，或 Fast 倍率未知；历史价格快照也可能未保存这些价格。显示金额仅包含已知部分。",
+  "unknownFastSurcharge_other": "有 {{count, number}} 次 Fast 调用的 API 加价未知。模型或所需 Token 单价缺失，或 Fast 倍率未知；历史价格快照也可能未保存这些价格。显示金额仅包含已知加价。"
+}

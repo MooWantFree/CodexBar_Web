@@ -1,0 +1,7 @@
+{
+  "missingPrices": "必要な価格情報がないため、金額を算出できません。",
+  "modelsWithUnpricedCalls": "価格不明の呼び出しがあるモデル：{{models}}。",
+  "standardRateFallback_other": "{{count, number}} 回の Fast 呼び出しを Standard 料金で暫定推定しています。不明な Fast 追加料金は含みません。",
+  "unknownApiCost_other": "{{count, number}} 回の呼び出しの API 相当額が不明です。モデルまたは必要な Token 単価がないか、Fast 倍率が不明です。保存済み価格スナップショットにこれらの価格がない場合もあります。表示額は判明分のみです。",
+  "unknownFastSurcharge_other": "{{count, number}} 回の Fast 呼び出しの API 追加料金が不明です。モデルまたは必要な Token 単価がないか、Fast 倍率が不明です。保存済み価格スナップショットにこれらの価格がない場合もあります。表示額は判明した追加料金のみです。"
+}

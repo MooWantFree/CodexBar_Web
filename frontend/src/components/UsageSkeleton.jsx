@@ -5,7 +5,7 @@ export function UsageSkeleton({className = '', style}) {
 }
 
 export function LoadingStatus({loading, children}) {
-  return <p className="sr-only" role="status">{loading ? children || t('正在读取…') : ''}</p>;
+  return <p className="sr-only" role="status">{loading ? children || t("common:loading") : ''}</p>;
 }
 
 export function UsageTableSkeleton({columns, rows = 4}) {

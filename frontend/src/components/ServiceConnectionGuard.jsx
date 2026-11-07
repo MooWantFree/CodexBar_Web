@@ -1,18 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {addMessages, t, useLocale} from '../lib/i18n';
-
-addMessages({
-  en: {
-    '服务已关闭': 'Service is unavailable',
-    '无法连接后端服务。请重新启动服务，连接恢复后此提示会自动消失。': 'Cannot connect to the backend. Restart the service; this notice will disappear when the connection recovers.',
-    '关闭提示': 'Dismiss notice',
-  },
-  ja: {
-    '服务已关闭': 'サービスに接続できません',
-    '无法连接后端服务。请重新启动服务，连接恢复后此提示会自动消失。': 'バックエンドに接続できません。サービスを再起動してください。接続が回復すると、この通知は自動的に閉じます。',
-    '关闭提示': '通知を閉じる',
-  },
-});
+import {t, useLocale} from "../lib/i18n";
 
 const HEARTBEAT_INTERVAL = 3000;
 const HEARTBEAT_TIMEOUT = 2000;
@@ -75,8 +62,8 @@ export default function ServiceConnectionGuard({children}) {
     aria-modal="true" aria-labelledby="service-offline-title" aria-describedby="service-offline-description"
     onCancel={() => setDismissed(true)}>
     <div className="service-offline-icon" aria-hidden="true">!</div>
-    <h2 id="service-offline-title">{t('服务已关闭')}</h2>
-    <p id="service-offline-description">{t('无法连接后端服务。请重新启动服务，连接恢复后此提示会自动消失。')}</p>
-    <button className="button" autoFocus onClick={() => setDismissed(true)}>{t('关闭提示')}</button>
+    <h2 id="service-offline-title">{t("connection:serviceIsUnavailable")}</h2>
+    <p id="service-offline-description">{t("connection:reconnectHint")}</p>
+    <button className="button" autoFocus onClick={() => setDismissed(true)}>{t("connection:dismissNotice")}</button>
   </dialog>}</>;
 }

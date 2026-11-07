@@ -1,0 +1,5 @@
+{
+  "dismissNotice": "Dismiss notice",
+  "reconnectHint": "Cannot connect to the backend. Restart the service; this notice will disappear when the connection recovers.",
+  "serviceIsUnavailable": "Service is unavailable"
+}

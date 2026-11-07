@@ -16,7 +16,7 @@ async function bootstrap() {
   render(<AppSkeleton/>);
   const config = document.body.dataset.defaultStart ? {...document.body.dataset}
     : await fetch('/api/ui-config').then(response => {
-      if (!response.ok) throw new Error(t('请求失败（{status}）', {status: response.status}));
+      if (!response.ok) throw new Error(t("common:requestFailed", {status: response.status}));
       return response.json();
     });
   Object.assign(document.body.dataset, config);

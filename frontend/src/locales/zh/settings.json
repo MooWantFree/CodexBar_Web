@@ -1,0 +1,18 @@
+{
+  "chinese": "中文 (Chinese)",
+  "chooseFolder": "选择文件夹",
+  "choosing": "正在选择…",
+  "codexLogDirectory": "Codex 日志目录",
+  "directoryNotFound": "当前日志目录不存在，请选择有效目录。",
+  "directoryRequirements": "目录需包含 sessions、archived_sessions 或 logs_2.sqlite。已有历史记录会保留。",
+  "english": "English",
+  "enterTheCodexLogDirectory": "请输入 Codex 日志目录。",
+  "followBrowser": "跟随浏览器",
+  "interfaceLanguage": "显示语言",
+  "japanese": "日本語",
+  "logDirectorySaved": "日志目录已保存。",
+  "logsAndInterface": "日志与界面",
+  "saveAndScan": "保存并扫描",
+  "savingAndScanning": "正在保存并扫描…",
+  "settings": "设置"
+}
